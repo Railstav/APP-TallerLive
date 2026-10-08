@@ -581,7 +581,13 @@
           if (remoteData.fleet) appFleet = remoteData.fleet;
           if (remoteData.vias) appVias = remoteData.vias;
           if (remoteData.reqs) appReqs = remoteData.reqs;
-          if (remoteData.turnos) appTurnosCalendar = remoteData.turnos;
+          if (remoteData.turnos) {
+            try {
+              appTurnosCalendar = typeof remoteData.turnos === 'string' ? JSON.parse(remoteData.turnos) : remoteData.turnos;
+            } catch(e) {
+              appTurnosCalendar = remoteData.turnos;
+            }
+           }
 
           // Guardar copia local
           localStorage.setItem('sfm_live_fleet_fb', JSON.stringify(appFleet));
@@ -617,12 +623,12 @@
     renderTurnos();
 
     // 3. Enviar a Firebase en segundo plano para los demás dispositivos
-   if (db && isFirebaseOnline) {
+   if (db) {
     db.ref('sfm_taller_live').update({
       fleet: appFleet,
       vias: appVias,
       reqs: appReqs,
-      turnos: appTurnosCalendar,
+      turnos: JSON.stringify(appTurnosCalendar),
       updatedAt: Date.now()
     }).catch(function(err) {
       console.error("Error enviando a Firebase:", err);
@@ -636,7 +642,7 @@
         fleet: appFleet,
         vias: appVias,
         reqs: appReqs,
-        turnos: appTurnosCalendar,
+        turnos: JSON.stringify(appTurnosCalendar),
         updatedAt: firebase.database.ServerValue.TIMESTAMP
       });
     }
