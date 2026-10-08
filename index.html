@@ -1,0 +1,1209 @@
+<!DOCTYPE html>
+<html lang="es" class="h-full bg-slate-950">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Taller Live · SFM Supervisión</title>
+  
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Phosphor Icons -->
+  <script src="https://unpkg.com/@phosphor-icons/web"></script>
+  <!-- SheetJS para lectura de Excel (.xlsx / .csv) -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+
+  <style>
+    body {
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+      touch-action: manipulation;
+    }
+    .pb-safe { padding-bottom: env(safe-area-inset-bottom, 16px); }
+    .pt-safe { padding-top: env(safe-area-inset-top, 8px); }
+
+    /* BLOQUE DE ESTADO FIJO: Dimensiones estrictamente fijas para que todos sean idénticos */
+    .status-pill-fixed {
+      width: 142px;
+      min-width: 142px;
+      max-width: 142px;
+      height: 52px;
+      min-height: 52px;
+      max-height: 52px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      border-radius: 1rem;
+      padding: 0.25rem 0.5rem;
+      flex-shrink: 0;
+    }
+
+    /* Colores y degradados de estado de flota */
+    .st-disp {
+      background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+      color: #ffffff;
+      box-shadow: 0 2px 8px rgba(16, 185, 129, 0.35);
+    }
+    .st-disp-sr {
+      background: linear-gradient(135deg, #059669 0%, #047857 100%);
+      color: #a7f3d0;
+      border: 1px solid #10b981;
+    }
+    .st-restr {
+      background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+      color: #000000;
+      box-shadow: 0 2px 8px rgba(245, 158, 11, 0.35);
+    }
+    .st-mant {
+      background: linear-gradient(135deg, #06b6d4 0%, #0891b2 100%);
+      color: #ffffff;
+      box-shadow: 0 2px 8px rgba(6, 182, 212, 0.35);
+    }
+    .st-averia {
+      background: linear-gradient(135deg, #ef4444 0%, #b91c1c 100%);
+      color: #ffffff;
+      box-shadow: 0 2px 8px rgba(239, 68, 68, 0.45);
+    }
+    .st-standstill {
+      background: #f8fafc;
+      color: #0f172a;
+      border: 1px solid #cbd5e1;
+    }
+    .st-nomant {
+      background: #1e293b;
+      color: #94a3b8;
+      border: 1px solid #334155;
+    }
+
+    /* Colores de celdas del cuadrante de turnos */
+    .cell-m { background-color: #38bdf8; color: #021325; font-weight: 900; }  /* Mañana */
+    .cell-t { background-color: #bef264; color: #142e03; font-weight: 900; }  /* Tarde */
+    .cell-gm { background-color: #2563eb; color: #ffffff; font-weight: 900; } /* Guardia Mañana */
+    .cell-gt { background-color: #06b6d4; color: #000000; font-weight: 900; } /* Guardia Tarde */
+    .cell-fm { background-color: #f97316; color: #ffffff; font-weight: 900; } /* Festivo Mañana */
+    .cell-ft { background-color: #ef4444; color: #ffffff; font-weight: 900; } /* Festivo Tarde */
+    .cell-d { background-color: #334155; color: #94a3b8; font-weight: 700; }  /* Descanso */
+    .cell-v { background-color: #e11d48; color: #ffffff; font-weight: 900; }  /* Vacaciones */
+    .cell-b { background-color: #8b5cf6; color: #ffffff; font-weight: 900; }  /* Baja */
+
+    /* Resaltado vertical de columna del día actual */
+    .col-today-header {
+      background-color: #0284c7 !important;
+      color: #ffffff !important;
+      border-left: 2px solid #38bdf8 !important;
+      border-right: 2px solid #38bdf8 !important;
+    }
+    .col-today-cell {
+      background-color: rgba(56, 189, 248, 0.14) !important;
+      border-left: 2px solid rgba(56, 189, 248, 0.7) !important;
+      border-right: 2px solid rgba(56, 189, 248, 0.7) !important;
+    }
+  </style>
+</head>
+<body class="h-full text-slate-100 flex flex-col font-sans antialiased overflow-hidden">
+
+  <!-- ==================== HEADER COMPACTO ==================== -->
+  <header class="pt-safe bg-[#001730] border-b border-sky-500/40 px-3 py-2 flex items-center justify-between shrink-0 shadow-lg">
+    <div class="flex items-center gap-2">
+      <div class="w-8 h-8 rounded-lg bg-sky-500 text-slate-950 flex items-center justify-center text-lg font-black shadow-md">
+        <i class="ph-bold ph-train"></i>
+      </div>
+      <div>
+        <h1 class="text-xs font-black text-white tracking-wider flex items-center gap-1.5 leading-tight">
+          TALLER LIVE <span class="text-[9px] bg-sky-400 text-slate-950 px-1.5 py-0.2 rounded font-black">SFM</span>
+        </h1>
+        <p class="text-[9px] text-sky-300 font-bold uppercase tracking-tight">Son Rullán · Supervisión</p>
+      </div>
+    </div>
+
+    <!-- Indicador global rápido (Abre modal de requisitos) -->
+    <div onclick="openRequirementsModal()" class="flex items-center gap-2 bg-slate-900 border border-sky-500/30 px-2.5 py-1 rounded-xl cursor-pointer active:scale-95 transition" title="Toca para ajustar mínimos">
+      <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+      <div class="text-right leading-none">
+        <div class="text-[8px] text-slate-400 font-bold uppercase">Disponibilidad</div>
+        <div class="text-xs font-black text-white" id="header-disp-ratio">0 / 0</div>
+      </div>
+      <i class="ph-bold ph-sliders text-sky-400 text-xs"></i>
+    </div>
+  </header>
+
+  <!-- ==================== CONTENEDOR PRINCIPAL ==================== -->
+  <main class="flex-1 overflow-y-auto p-2.5 space-y-3">
+
+    <!-- ========================================================================= -->
+    <!-- PESTAÑA 1: DISPONIBILIDAD                                                 -->
+    <!-- ========================================================================= -->
+    <section id="view-disponibilidad" class="space-y-3">
+      
+      <!-- 1.1 TARJETA SUPERIOR DE DISPONIBILIDAD (TOCA DIRECTAMENTE PARA AJUSTAR MÍNIMOS) -->
+      <div class="bg-gradient-to-br from-slate-900 via-slate-900 to-[#001730] border-2 border-sky-500/50 rounded-2xl p-3 shadow-xl">
+        <div class="flex items-center justify-between border-b border-slate-800 pb-2 mb-2">
+          <div class="flex items-center gap-2">
+            <div class="w-7 h-7 rounded-lg bg-sky-500/20 text-sky-400 flex items-center justify-center text-sm font-black">
+              <i class="ph-bold ph-shield-check"></i>
+            </div>
+            <div>
+              <h2 class="text-xs font-black text-white uppercase tracking-wider">Disponibilidad Flota SFM</h2>
+              <p class="text-[10px] text-slate-400 font-medium">30 Unidades · Toca una serie para configurar mínimos</p>
+            </div>
+          </div>
+          <div class="text-[10px] text-sky-400 font-bold font-mono" id="summary-percentage-badge">100%</div>
+        </div>
+
+        <!-- Malla de Contadores: Al pulsar abre directamente el ajuste de mínimos -->
+        <div class="grid grid-cols-6 gap-1 text-center" id="summary-kpis-grid">
+          <!-- Render dinámico: TOTAL, 8100x3, 8100x4, 7100, 1100, 9100 -->
+        </div>
+
+        <!-- Barra de progreso visual -->
+        <div class="mt-2.5 bg-slate-950 rounded-full h-2 overflow-hidden border border-slate-800 flex">
+          <div id="progress-disp-bar" class="bg-emerald-500 h-full transition-all duration-500" style="width: 0%"></div>
+        </div>
+      </div>
+
+      <!-- Barra rápida de expansión -->
+      <div class="flex items-center justify-between px-1">
+        <span class="text-[11px] font-black text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+          <i class="ph-bold ph-list-dashes text-sky-400"></i> Series SFM
+        </span>
+        <div class="flex items-center gap-1">
+          <button onclick="expandAllSeries(true)" class="text-[10px] bg-slate-900 hover:bg-slate-800 text-sky-300 font-bold px-2 py-0.5 rounded border border-slate-800">
+            Mostrar Todo
+          </button>
+          <button onclick="expandAllSeries(false)" class="text-[10px] bg-slate-900 hover:bg-slate-800 text-slate-400 font-bold px-2 py-0.5 rounded border border-slate-800">
+            Ocultar Todo
+          </button>
+        </div>
+      </div>
+
+      <!-- 1.2 CONTENEDOR DE SERIES EN ORDEN: 8100x3, 8100x4, 7100, 1100, 9100 -->
+      <div class="space-y-2.5" id="series-accordion-container">
+        <!-- Render dinámico de las 5 series -->
+      </div>
+    </section>
+
+
+    <!-- ========================================================================= -->
+    <!-- PESTAÑA 2: VÍAS Y FOSO (SIN 'UT' NI '[OCUPADA]', MÁS LIMPIO)                -->
+    <!-- ========================================================================= -->
+    <section id="view-vias" class="space-y-2.5 hidden">
+      <div class="flex items-center justify-between px-1">
+        <span class="text-xs font-black text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+          <i class="ph-bold ph-git-fork text-sky-400 text-sm"></i> Vías de Taller Son Rullán
+        </span>
+        <span class="text-[10px] text-amber-300 font-bold bg-amber-950/80 border border-amber-800 px-2 py-0.5 rounded">
+          ⚡ Catenaria LOTO
+        </span>
+      </div>
+
+      <div class="space-y-2.5" id="vias-cards-list">
+        <!-- Render dinámico de vías -->
+      </div>
+    </section>
+
+
+    <!-- ========================================================================= -->
+    <!-- PESTAÑA 3: TURNOS (SOLO M Y T, NUEVOS TURNOS, COLUMNA DE HOY RESALTADA)   -->
+    <!-- ========================================================================= -->
+    <section id="view-turnos" class="space-y-2.5 hidden">
+      
+      <div class="bg-slate-900 border border-slate-800 rounded-xl p-2.5 space-y-2 shadow-md">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-1.5">
+            <span class="text-xs font-black text-white flex items-center gap-1">
+              <i class="ph-bold ph-calendar text-sky-400"></i> Cuadrante de Turnos
+            </span>
+            <span class="text-[9px] bg-slate-800 text-sky-300 px-1.5 py-0.5 rounded font-mono font-bold" id="turnos-active-range">Abril 2026</span>
+          </div>
+
+          <!-- Botón de carga compacto -->
+          <div class="flex items-center gap-1.5">
+            <label class="bg-sky-600 hover:bg-sky-500 text-slate-950 font-black text-[10px] py-1 px-2.5 rounded-lg flex items-center gap-1 cursor-pointer active:scale-95 transition shadow">
+              <i class="ph-bold ph-upload-simple"></i>
+              <span>Cargar Excel</span>
+              <input type="file" id="turnos-file-input" accept=".xlsx, .xls, .csv" onchange="handleTurnosUpload(event)" class="hidden">
+            </label>
+            <button onclick="loadSampleTurnosReal()" title="Cargar plantilla ejemplo" class="bg-slate-800 text-slate-300 text-[10px] py-1 px-2 rounded-lg font-bold border border-slate-700">
+              Demo
+            </button>
+          </div>
+        </div>
+
+        <!-- SOLO FILTROS: TODOS, MAÑANA Y TARDE -->
+        <div class="flex items-center gap-1.5 overflow-x-auto pb-0.5 text-[11px] font-bold">
+          <button onclick="setTurnoFilter('TODOS')" id="btn-flt-TODOS" class="px-3 py-1 rounded-lg bg-sky-600 text-white shadow">Todos</button>
+          <button onclick="setTurnoFilter('M')" id="btn-flt-M" class="px-3 py-1 rounded-lg bg-slate-800 text-sky-300 border border-slate-700">Mañana (M)</button>
+          <button onclick="setTurnoFilter('T')" id="btn-flt-T" class="px-3 py-1 rounded-lg bg-slate-800 text-lime-300 border border-slate-700">Tarde (T)</button>
+        </div>
+
+        <!-- Selector de Semana -->
+        <div class="flex items-center justify-between bg-slate-950 p-1.5 rounded-lg border border-slate-800 text-xs">
+          <button onclick="prevWeekTurnos()" class="text-slate-400 hover:text-white px-2 py-0.5 rounded bg-slate-900 border border-slate-800 font-bold">
+            ◀ Anterior
+          </button>
+          <span class="font-bold text-white text-[11px]" id="turnos-week-title">Semana</span>
+          <button onclick="nextWeekTurnos()" class="text-slate-400 hover:text-white px-2 py-0.5 rounded bg-slate-900 border border-slate-800 font-bold">
+            Siguiente ▶
+          </button>
+        </div>
+      </div>
+
+      <!-- Leyenda de colores -->
+      <div class="flex items-center justify-between text-[9px] font-black px-1.5 text-slate-400 overflow-x-auto gap-2">
+        <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded cell-m inline-block"></span> M: Mañ</span>
+        <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded cell-t inline-block"></span> T: Tard</span>
+        <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded cell-gm inline-block"></span> GM: G.Mañ</span>
+        <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded cell-gt inline-block"></span> GT: G.Tard</span>
+        <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded cell-fm inline-block"></span> FM: F.Mañ</span>
+        <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded cell-ft inline-block"></span> FT: F.Tard</span>
+      </div>
+
+      <!-- TABLA CUADRANTE CON DÍA ACTUAL RESALTADO EN TODA LA COLUMNA -->
+      <div class="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-2xl">
+        <div class="overflow-x-auto">
+          <table class="w-full text-left text-xs whitespace-nowrap" id="table-turnos-main">
+            <thead class="bg-[#001730] text-white uppercase text-[10px] font-black border-b border-sky-600" id="turnos-table-head">
+              <!-- Cabecera dinámica con día actual resaltado -->
+            </thead>
+            <tbody id="turnos-table-body" class="divide-y divide-slate-800 font-bold">
+              <!-- Filas dinámicas -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <p class="text-[10px] text-slate-500 italic text-center">Toca cualquier casilla para modificar el turno del técnico.</p>
+    </section>
+
+  </main>
+
+
+  <!-- ========================================================================= -->
+  <!-- MODAL: CAMBIO RÁPIDO DE ESTADO DE UNIDAD                                  -->
+  <!-- ========================================================================= -->
+  <div id="modal-unit" class="fixed inset-0 bg-black/85 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 hidden">
+    <div class="bg-slate-900 border-t-2 sm:border-2 border-sky-500 w-full max-w-sm rounded-t-3xl sm:rounded-2xl p-4 space-y-3 shadow-2xl">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-2">
+        <div>
+          <div class="text-[10px] text-sky-400 font-black uppercase" id="m-unit-serie">SERIE 8100x3</div>
+          <h2 class="text-2xl font-black text-white font-mono tracking-tight" id="m-unit-code">8101</h2>
+          <div class="text-xs text-slate-400 font-mono font-bold" id="m-unit-comp">8101-8301-8102</div>
+        </div>
+        <button onclick="closeUnitModal()" class="w-8 h-8 rounded-full bg-slate-800 text-slate-300 flex items-center justify-center">
+          <i class="ph-bold ph-x text-lg"></i>
+        </button>
+      </div>
+
+      <!-- Estados con estética moderna -->
+      <div class="space-y-1.5">
+        <label class="block text-[11px] font-black text-slate-300 uppercase">Seleccionar Estado:</label>
+        <div class="grid grid-cols-2 gap-1.5">
+          <button onclick="setModalStatus('DISPONIBLE')" id="btn-st-DISPONIBLE" class="p-2.5 rounded-xl text-xs font-black text-center transition st-disp">
+            DISPONIBLE
+          </button>
+          <button onclick="setModalStatus('DISPONIBLE CON RESTRICCIONES')" id="btn-st-DISPONIBLE CON RESTRICCIONES" class="p-2.5 rounded-xl text-[11px] font-black text-center transition st-restr leading-tight">
+            DISP. RESTRICCIÓN
+          </button>
+          <button onclick="setModalStatus('MANTENIMIENTO')" id="btn-st-MANTENIMIENTO" class="p-2.5 rounded-xl text-xs font-black text-center transition st-mant">
+            MANTENIMIENTO
+          </button>
+          <button onclick="setModalStatus('AVERIA')" id="btn-st-AVERIA" class="p-2.5 rounded-xl text-xs font-black text-center transition st-averia">
+            AVERÍA
+          </button>
+          <button onclick="setModalStatus('DISPONIBLE SON RULLAN')" id="btn-st-DISPONIBLE SON RULLAN" class="p-2.5 rounded-xl text-[11px] font-black text-center transition st-disp-sr">
+            DISP. SON RULLÁN
+          </button>
+          <button onclick="setModalStatus('STAND STILL')" id="btn-st-STAND STILL" class="p-2.5 rounded-xl text-xs font-black text-center transition st-standstill">
+            STAND STILL
+          </button>
+        </div>
+      </div>
+
+      <!-- Ubicación rápida -->
+      <div>
+        <label class="block text-[11px] font-black text-slate-300 uppercase mb-1">Situación de Operación:</label>
+        <select id="m-unit-situacion" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-xs text-white font-bold focus:border-sky-500">
+          <option value="En Circulación (Línea)">En Circulación (Línea)</option>
+          <option value="En Taller / Foso">En Taller / Foso</option>
+          <option value="Estacionamiento Son Rullán">Estacionamiento Son Rullán</option>
+          <option value="Vía Torno Reperfilado">Vía Torno Reperfilado</option>
+          <option value="Estación Intermodal">Estación Intermodal</option>
+        </select>
+      </div>
+
+      <!-- Nota táctica -->
+      <div>
+        <label class="block text-[11px] font-black text-slate-300 uppercase mb-1">Nota Táctica / Trabajo:</label>
+        <input type="text" id="m-unit-nota" placeholder="Ej. Tracción M1 anulada / Preventivo IM2..." class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white font-medium focus:border-sky-500">
+      </div>
+
+      <button onclick="saveUnitModalChanges()" class="w-full py-2.5 bg-sky-500 hover:bg-sky-400 text-slate-950 font-black text-xs rounded-xl shadow-lg uppercase tracking-wider transition">
+        Guardar
+      </button>
+    </div>
+  </div>
+
+
+  <!-- ========================================================================= -->
+  <!-- MODAL: EDICIÓN RÁPIDA DE CASILLA DE TURNO (M, T, GM, GT, FM, FT, D, V, B) -->
+  <!-- ========================================================================= -->
+  <div id="modal-edit-turno" class="fixed inset-0 bg-black/85 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-slate-900 border-2 border-sky-500 w-full max-w-xs rounded-2xl p-4 space-y-3 shadow-2xl">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-2">
+        <div>
+          <span class="text-[10px] text-sky-400 font-bold uppercase" id="m-turno-fecha">Fecha</span>
+          <h3 class="text-sm font-black text-white" id="m-turno-nombre">TÉCNICO</h3>
+        </div>
+        <button onclick="closeEditTurnoModal()" class="w-7 h-7 rounded-full bg-slate-800 text-slate-300 flex items-center justify-center">
+          <i class="ph-bold ph-x text-base"></i>
+        </button>
+      </div>
+
+      <p class="text-[11px] text-slate-400">Selecciona el turno o guardia:</p>
+
+      <div class="grid grid-cols-3 gap-1.5 text-center text-xs font-black">
+        <button onclick="applyTurnoCode('M')" class="p-2.5 rounded-lg cell-m">M (Mañana)</button>
+        <button onclick="applyTurnoCode('T')" class="p-2.5 rounded-lg cell-t">T (Tarde)</button>
+        <button onclick="applyTurnoCode('GM')" class="p-2.5 rounded-lg cell-gm">GM (G. Mañana)</button>
+        <button onclick="applyTurnoCode('GT')" class="p-2.5 rounded-lg cell-gt">GT (G. Tarde)</button>
+        <button onclick="applyTurnoCode('FM')" class="p-2.5 rounded-lg cell-fm">FM (Fest. Mañ)</button>
+        <button onclick="applyTurnoCode('FT')" class="p-2.5 rounded-lg cell-ft">FT (Fest. Tard)</button>
+        <button onclick="applyTurnoCode('D')" class="p-2.5 rounded-lg cell-d">D (Descanso)</button>
+        <button onclick="applyTurnoCode('V')" class="p-2.5 rounded-lg cell-v">V (Vacaciones)</button>
+        <button onclick="applyTurnoCode('B')" class="p-2.5 rounded-lg cell-b">B (Baja)</button>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ========================================================================= -->
+  <!-- MODAL: AJUSTE DE REQUISITOS MÍNIMOS DEL CLIENTE                           -->
+  <!-- ========================================================================= -->
+  <div id="modal-reqs" class="fixed inset-0 bg-black/85 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-slate-900 border-2 border-sky-500 w-full max-w-sm rounded-2xl p-4 space-y-3 shadow-2xl">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-2">
+        <h3 class="text-xs font-black text-white flex items-center gap-1.5 uppercase">
+          <i class="ph-bold ph-sliders text-sky-400"></i> Requisitos Cliente SFM
+        </h3>
+        <button onclick="closeRequirementsModal()" class="w-7 h-7 rounded-full bg-slate-800 text-slate-300 flex items-center justify-center">
+          <i class="ph-bold ph-x text-base"></i>
+        </button>
+      </div>
+
+      <div class="space-y-1.5 text-xs font-bold">
+        <div class="flex items-center justify-between bg-slate-950 p-2 rounded-lg border border-slate-800">
+          <span class="text-white">Serie 8100x3 (de 5 U):</span>
+          <input type="number" id="req-8100x3" class="w-16 bg-slate-900 border border-slate-700 rounded p-1 text-center text-white font-mono" min="0" max="5">
+        </div>
+        <div class="flex items-center justify-between bg-slate-950 p-2 rounded-lg border border-slate-800">
+          <span class="text-white">Serie 8100x4 (de 8 U):</span>
+          <input type="number" id="req-8100x4" class="w-16 bg-slate-900 border border-slate-700 rounded p-1 text-center text-white font-mono" min="0" max="8">
+        </div>
+        <div class="flex items-center justify-between bg-slate-950 p-2 rounded-lg border border-slate-800">
+          <span class="text-white">Serie 7100 (de 6 U):</span>
+          <input type="number" id="req-7100" class="w-16 bg-slate-900 border border-slate-700 rounded p-1 text-center text-white font-mono" min="0" max="6">
+        </div>
+        <div class="flex items-center justify-between bg-slate-950 p-2 rounded-lg border border-slate-800">
+          <span class="text-white">Serie 1100 (de 5 U):</span>
+          <input type="number" id="req-1100" class="w-16 bg-slate-900 border border-slate-700 rounded p-1 text-center text-white font-mono" min="0" max="5">
+        </div>
+        <div class="flex items-center justify-between bg-slate-950 p-2 rounded-lg border border-slate-800">
+          <span class="text-white">Serie 9100 (de 6 U):</span>
+          <input type="number" id="req-9100" class="w-16 bg-slate-900 border border-slate-700 rounded p-1 text-center text-white font-mono" min="0" max="6">
+        </div>
+      </div>
+
+      <button onclick="saveRequirements()" class="w-full py-2.5 bg-sky-500 hover:bg-sky-400 text-slate-950 font-black text-xs rounded-xl shadow uppercase">
+        Guardar Configuración
+      </button>
+    </div>
+  </div>
+
+
+  <!-- ==================== NAVEGACIÓN INFERIOR FIJA ==================== -->
+  <nav class="pb-safe bg-[#001730] border-t border-sky-600/50 grid grid-cols-3 shrink-0 shadow-2xl">
+    <button onclick="switchTab('disponibilidad')" id="nav-btn-disponibilidad" class="py-2.5 flex flex-col items-center gap-0.5 text-sky-400 font-black transition">
+      <i class="ph-bold ph-table text-xl"></i>
+      <span class="text-[10px] tracking-wide uppercase">Disponibilidad</span>
+    </button>
+    <button onclick="switchTab('vias')" id="nav-btn-vias" class="py-2.5 flex flex-col items-center gap-0.5 text-slate-400 font-bold transition">
+      <i class="ph-bold ph-git-fork text-xl"></i>
+      <span class="text-[10px] tracking-wide uppercase">Vías & Foso</span>
+    </button>
+    <button onclick="switchTab('turnos')" id="nav-btn-turnos" class="py-2.5 flex flex-col items-center gap-0.5 text-slate-400 font-bold transition">
+      <i class="ph-bold ph-calendar text-xl"></i>
+      <span class="text-[10px] tracking-wide uppercase">Turnos</span>
+    </button>
+  </nav>
+
+
+  <!-- ========================================================================= -->
+  <!-- JAVASCRIPT: LÓGICA COMPLETA DE LA APLICACIÓN                              -->
+  <!-- ========================================================================= -->
+  <script>
+    // 1. CENSO OFICIAL: 30 UNIDADES ELÉCTRICAS SFM
+    var SFM_FLOTA_DATA = [
+      // 1. Serie 8100x3 (5 U: 8101 a 8105)
+      { id: "8101", serie: "8100x3", comp: "8101-8301-8102" },
+      { id: "8102", serie: "8100x3", comp: "8103-8302-8104" },
+      { id: "8103", serie: "8100x3", comp: "8105-8303-8106" },
+      { id: "8104", serie: "8100x3", comp: "8107-8304-8108" },
+      { id: "8105", serie: "8100x3", comp: "8109-8305-8110" },
+
+      // 2. Serie 8100x4 (8 U: 8106 a 8113)
+      { id: "8106", serie: "8100x4", comp: "8111-8306-8307-8112" },
+      { id: "8107", serie: "8100x4", comp: "8113-8308-8309-8114" },
+      { id: "8108", serie: "8100x4", comp: "8115-8310-8311-8116" },
+      { id: "8109", serie: "8100x4", comp: "8117-8312-8313-8118" },
+      { id: "8110", serie: "8100x4", comp: "8119-8314-8315-8120" },
+      { id: "8111", serie: "8100x4", comp: "8121-8316-8317-8122" },
+      { id: "8112", serie: "8100x4", comp: "8123-8318-8319-8124" },
+      { id: "8113", serie: "8100x4", comp: "8125-8320-8321-8126" },
+
+      // 3. Serie 7100 (6 U: 7101 a 7106)
+      { id: "7101", serie: "7100", comp: "7101-7102" },
+      { id: "7102", serie: "7100", comp: "7103-7104" },
+      { id: "7103", serie: "7100", comp: "7105-7106" },
+      { id: "7104", serie: "7100", comp: "7107-7108" },
+      { id: "7105", serie: "7100", comp: "7109-7110" },
+      { id: "7106", serie: "7100", comp: "7111-7112" },
+
+      // 4. Serie 1100 (5 U: 1101 a 1105)
+      { id: "1101", serie: "1100", comp: "1101-1201-1202-1102" },
+      { id: "1102", serie: "1100", comp: "1103-1203-1204-1104" },
+      { id: "1103", serie: "1100", comp: "1105-1205-1206-1106" },
+      { id: "1104", serie: "1100", comp: "1107-1207-1208-1108" },
+      { id: "1105", serie: "1100", comp: "1109-1209-1210-1110" },
+
+      // 5. Serie 9100 (6 U: 9101 a 9106)
+      { id: "9101", serie: "9100", comp: "9101-9301-9102" },
+      { id: "9102", serie: "9100", comp: "9103-9302-9104" },
+      { id: "9103", serie: "9100", comp: "9105-9303-9106" },
+      { id: "9104", serie: "9100", comp: "9107-9304-9108" },
+      { id: "9105", serie: "9100", comp: "9109-9305-9110" },
+      { id: "9106", serie: "9100", comp: "9111-9306-9112" }
+    ];
+
+    // ORDEN ESTRICTO DE SERIES: 8100x3, 8100x4, 7100, 1100, 9100
+    var ORDERED_SERIES = [
+      { code: "8100x3", name: "S/8100x3 SFM (3 Coches)", total: 5 },
+      { code: "8100x4", name: "S/8100x4 SFM (4 Coches)", total: 8 },
+      { code: "7100",   name: "S/7100 SFM (Metro Palma)", total: 6 },
+      { code: "1100",   name: "S/1100 SFM (EMU)", total: 5 },
+      { code: "9100",   name: "S/9100 SFM (Tren-Tram)", total: 6 }
+    ];
+
+    var DEFAULT_REQS = { "8100x3": 4, "8100x4": 6, "7100": 4, "1100": 4, "9100": 4 };
+    
+    var DEFAULT_VIAS = [
+      { id: "V13", name: "VÍA 13 (FOSO 1)", secc: "TIERRA", unit: "8104", trabajo: "Preventivo IM2" },
+      { id: "V21", name: "VÍA 21 (FOSO 2)", secc: "TIERRA", unit: "8117-18", trabajo: "IM2 + soporte cilindro freno" },
+      { id: "V23", name: "VÍA 23 (FOSO 3)", secc: "TENSION", unit: "7102", trabajo: "Reparación Tracción N2" },
+      { id: "V25", name: "VÍA 25 (FOSO 4)", secc: "TENSION", unit: null, trabajo: "" },
+      { id: "VTORNO", name: "VÍA TORNO FOSO", secc: "NO_APLICA", unit: "8112", trabajo: "Reperfilado Ejes 1-4" },
+      { id: "VLAV", name: "VÍA LAVADO / INSP.", secc: "TENSION", unit: null, trabajo: "" }
+    ];
+
+    // ESTADO EN MEMORIA
+    var appFleet = {};
+    var appVias = [];
+    var appReqs = {};
+    var appTurnosCalendar = [];
+    var expandedSeries = { "8100x3": true, "8100x4": true, "7100": true, "1100": true, "9100": true };
+    var currentTurnoFilter = 'TODOS';
+    var currentWeekOffset = 0;
+    var activeHighlightedDay = null; // Día actual a resaltar
+
+    window.addEventListener('DOMContentLoaded', function() {
+      loadAllStorage();
+      renderDisponibilidad();
+      renderVias();
+      renderTurnos();
+    });
+
+    function loadAllStorage() {
+      var rSaved = localStorage.getItem('sfm_live_reqs_v4');
+      appReqs = rSaved ? JSON.parse(rSaved) : DEFAULT_REQS;
+
+      var vSaved = localStorage.getItem('sfm_live_vias_v4');
+      appVias = vSaved ? JSON.parse(vSaved) : DEFAULT_VIAS;
+
+      var fSaved = localStorage.getItem('sfm_live_fleet_v4');
+      if (fSaved) {
+        appFleet = JSON.parse(fSaved);
+      } else {
+        SFM_FLOTA_DATA.forEach(function(u) {
+          appFleet[u.id] = { estado: 'DISPONIBLE', situacion: 'En Circulación (Línea)', nota: '' };
+        });
+        // Estados iniciales representativos
+        appFleet['8101'].estado = 'DISPONIBLE';
+        appFleet['8101'].situacion = 'En Taller / Foso';
+        
+        appFleet['8102'].estado = 'AVERIA';
+        appFleet['8102'].situacion = 'En Circulación (Línea)';
+
+        appFleet['8103'].estado = 'DISPONIBLE CON RESTRICCIONES';
+        appFleet['8103'].situacion = 'En Circulación (Línea)';
+
+        appFleet['8104'].estado = 'DISPONIBLE CON RESTRICCIONES';
+        appFleet['8104'].situacion = 'En Taller / Foso';
+        appFleet['8104'].nota = 'Tracción M1 anulada';
+
+        appFleet['8105'].estado = 'AVERIA';
+        appFleet['8105'].situacion = 'En Circulación (Línea)';
+        appFleet['8105'].nota = 'Convertidor estático SIV';
+
+        appFleet['8108'].estado = 'DISPONIBLE SON RULLAN';
+        appFleet['8112'].estado = 'STAND STILL';
+        appFleet['8112'].nota = 'Reductor provisional';
+        appFleet['7102'].estado = 'MANTENIMIENTO';
+        appFleet['7105'].estado = 'MANTENIMIENTO';
+        ['9101','9102','9103','9104','9105','9106'].forEach(function(id){ appFleet[id].estado = 'NO MANTENIDA'; });
+      }
+
+      var tSaved = localStorage.getItem('sfm_live_turnos_v4');
+      if (tSaved) {
+        appTurnosCalendar = JSON.parse(tSaved);
+      } else {
+        initDefaultTurnos();
+      }
+
+      // Determinar día actual a resaltar
+      var hoy = new Date();
+      var hoyStr = hoy.getDate() + '/' + (hoy.getMonth() + 1);
+      // Si la fecha existe en el calendario, fijarla; de lo contrario por defecto 1/4 (abril)
+      var existe = turnosDays.some(function(d){ return d.date === hoyStr; });
+      activeHighlightedDay = existe ? hoyStr : "1/4";
+    }
+
+    function saveAllStorage() {
+      localStorage.setItem('sfm_live_reqs_v4', JSON.stringify(appReqs));
+      localStorage.setItem('sfm_live_vias_v4', JSON.stringify(appVias));
+      localStorage.setItem('sfm_live_fleet_v4', JSON.stringify(appFleet));
+      localStorage.setItem('sfm_live_turnos_v4', JSON.stringify(appTurnosCalendar));
+    }
+
+    // =========================================================================
+    // 1. PESTAÑA DISPONIBILIDAD (BLOQUE FIJO 140x52px, NOTA EN LÍNEA INFERIOR)
+    // =========================================================================
+    function renderDisponibilidad() {
+      renderSummaryCards();
+      renderSeriesBlocks();
+    }
+
+    function renderSummaryCards() {
+      var grid = document.getElementById('summary-kpis-grid');
+      grid.innerHTML = '';
+
+      var totalAptas = 0;
+      var totalReq = 0;
+
+      var stats = {};
+      ORDERED_SERIES.forEach(function(s) {
+        var units = SFM_FLOTA_DATA.filter(function(x){ return x.serie === s.code; });
+        var aptas = units.filter(function(x) {
+          var st = appFleet[x.id] ? appFleet[x.id].estado : 'DISPONIBLE';
+          return (st === 'DISPONIBLE' || st === 'DISPONIBLE CON RESTRICCIONES' || st === 'DISPONIBLE SON RULLAN');
+        }).length;
+        var r = parseInt(appReqs[s.code] || 0);
+
+        stats[s.code] = { aptas: aptas, req: r, total: units.length };
+        totalAptas += aptas;
+        totalReq += r;
+      });
+
+      document.getElementById('header-disp-ratio').textContent = totalAptas + " / " + totalReq;
+      var pct = totalReq > 0 ? Math.min(100, Math.round((totalAptas / totalReq) * 100)) : 100;
+      document.getElementById('summary-percentage-badge').textContent = pct + "% Cobertura";
+
+      var bar = document.getElementById('progress-disp-bar');
+      bar.style.width = pct + "%";
+      bar.className = (totalAptas >= totalReq) ? 'bg-emerald-400 h-full transition-all duration-500 shadow-sm' : 'bg-rose-500 h-full transition-all duration-500 shadow-sm';
+
+      // Tarjeta TOTAL (Al tocar abre directamente configuración de mínimos)
+      var cardTotal = document.createElement('div');
+      var totalOk = totalAptas >= totalReq;
+      cardTotal.className = `p-1.5 rounded-xl border ${totalOk ? 'bg-emerald-950/40 border-emerald-600/70' : 'bg-rose-950/40 border-rose-600/70'} flex flex-col items-center justify-center cursor-pointer active:scale-95 transition`;
+      cardTotal.onclick = function() { openRequirementsModal(); };
+      cardTotal.innerHTML = `
+        <div class="text-[8px] font-black text-slate-300 uppercase">TOTAL</div>
+        <div class="text-xs font-black ${totalOk ? 'text-emerald-400' : 'text-rose-400'} font-mono">${totalAptas}/${totalReq}</div>
+        <div class="text-[8px] font-bold ${totalOk ? 'text-emerald-300' : 'text-rose-300'}">${pct}%</div>
+      `;
+      grid.appendChild(cardTotal);
+
+      // Tarjetas por serie (Al tocar abren configuración de mínimos)
+      ORDERED_SERIES.forEach(function(s) {
+        var st = stats[s.code];
+        var ok = st.aptas >= st.req;
+        var card = document.createElement('div');
+        card.className = `p-1.5 rounded-xl border ${ok ? 'bg-slate-900 border-slate-700' : 'bg-rose-950/30 border-rose-800'} flex flex-col items-center justify-center cursor-pointer active:scale-95 transition`;
+        card.onclick = function() { openRequirementsModal(); };
+        card.innerHTML = `
+          <div class="text-[8px] font-black text-sky-400 uppercase">${s.code}</div>
+          <div class="text-xs font-black ${ok ? 'text-white' : 'text-rose-400'} font-mono">${st.aptas}/${st.req}</div>
+          <div class="text-[8px] font-bold ${ok ? 'text-emerald-400' : 'text-rose-400'}">${ok ? 'OK' : 'DÉF'}</div>
+        `;
+        grid.appendChild(card);
+      });
+    }
+
+    function renderSeriesBlocks() {
+      var cont = document.getElementById('series-accordion-container');
+      cont.innerHTML = '';
+
+      ORDERED_SERIES.forEach(function(s) {
+        var isExpanded = expandedSeries[s.code] !== false;
+        var units = SFM_FLOTA_DATA.filter(function(x){ return x.serie === s.code; });
+        var aptasCount = units.filter(function(x) {
+          var st = appFleet[x.id] ? appFleet[x.id].estado : 'DISPONIBLE';
+          return (st === 'DISPONIBLE' || st === 'DISPONIBLE CON RESTRICCIONES' || st === 'DISPONIBLE SON RULLAN');
+        }).length;
+        var req = parseInt(appReqs[s.code] || 0);
+
+        var block = document.createElement('div');
+        block.className = 'bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-lg transition-all duration-300';
+        block.id = 'series-block-' + s.code;
+
+        // Cabecera interactiva
+        var header = `
+          <div onclick="toggleAccordion('${s.code}')" class="bg-gradient-to-r from-[#001730] to-[#002654] p-3 flex items-center justify-between cursor-pointer border-b border-sky-600/40 select-none">
+            <div class="flex items-center gap-2">
+              <i class="ph-bold ${isExpanded ? 'ph-caret-down' : 'ph-caret-right'} text-sky-400 text-sm"></i>
+              <div>
+                <h3 class="text-xs font-black text-white tracking-wider uppercase">${s.name}</h3>
+                <p class="text-[10px] text-sky-300 font-medium">Requeridas: <b class="text-white">${req}</b> · En Servicio: <b class="${aptasCount >= req ? 'text-emerald-400' : 'text-rose-400'}">${aptasCount}</b></p>
+              </div>
+            </div>
+            <div class="flex items-center gap-2">
+              <span class="text-[10px] font-black px-2 py-0.5 rounded-lg border ${aptasCount >= req ? 'bg-emerald-950 text-emerald-400 border-emerald-800' : 'bg-rose-950 text-rose-400 border-rose-800'}">
+                ${aptasCount}/${req} APTAS
+              </span>
+              <span class="text-[10px] text-sky-300 underline font-bold">${isExpanded ? 'Ocultar' : 'Mostrar'}</span>
+            </div>
+          </div>
+        `;
+
+        // Filas: Número de unidad grande + Nota en línea inferior + Bloque fijo 142x52px
+        var rowsHtml = '';
+        if (isExpanded) {
+          rowsHtml = units.map(function(u) {
+            var st = appFleet[u.id] || { estado: 'DISPONIBLE', situacion: 'En Circulación', nota: '' };
+            var badgeClass = getBadgeCssClass(st.estado);
+
+            return `
+              <div onclick="openUnitModal('${u.id}')" class="p-3 flex items-center justify-between border-b border-slate-800/80 last:border-b-0 hover:bg-slate-850/50 cursor-pointer active:scale-[0.99] transition bg-slate-950/60">
+                <!-- Columna Izquierda: Unidad, composición, ubicación y nota táctica en línea inferior -->
+                <div class="space-y-1 flex-1 pr-2.5 overflow-hidden">
+                  <!-- Línea 1: Número de unidad gigante y composición -->
+                  <div class="flex items-baseline gap-2">
+                    <span class="text-3xl font-black text-white font-mono tracking-tight leading-none">${u.id}</span>
+                    <span class="text-xs font-mono font-bold text-slate-400">${u.comp}</span>
+                  </div>
+                  <!-- Línea 2: Situación de operación -->
+                  <div class="text-[11px] text-slate-400 flex items-center gap-1 font-medium">
+                    <i class="ph-bold ph-map-pin text-sky-400 text-xs shrink-0"></i>
+                    <span class="truncate">${st.situacion || 'En Circulación (Línea)'}</span>
+                  </div>
+                  <!-- Línea 3: Nota táctica en línea inferior independiente -->
+                  ${st.nota ? `
+                  <div class="text-[11px] text-amber-300 font-semibold flex items-center gap-1 pt-0.5 truncate">
+                    <i class="ph-bold ph-warning text-amber-400 shrink-0"></i>
+                    <span class="truncate">${st.nota}</span>
+                  </div>` : ''}
+                </div>
+
+                <!-- Columna Derecha: Bloque de Estado FIJO del mismo tamaño (142x52px) -->
+                <div class="status-pill-fixed ${badgeClass}">
+                  <span class="text-[11px] font-black tracking-wide leading-tight text-center uppercase">${st.estado}</span>
+                </div>
+              </div>
+            `;
+          }).join('');
+        }
+
+        block.innerHTML = header + (isExpanded ? `<div>${rowsHtml}</div>` : '');
+        cont.appendChild(block);
+      });
+    }
+
+    function toggleAccordion(code) {
+      expandedSeries[code] = !expandedSeries[code];
+      renderSeriesBlocks();
+    }
+
+    function expandAllSeries(state) {
+      ORDERED_SERIES.forEach(function(s) { expandedSeries[s.code] = state; });
+      renderSeriesBlocks();
+    }
+
+    function getBadgeCssClass(estado) {
+      if (estado === 'DISPONIBLE') return 'st-disp';
+      if (estado === 'DISPONIBLE SON RULLAN') return 'st-disp-sr';
+      if (estado === 'DISPONIBLE CON RESTRICCIONES') return 'st-restr';
+      if (estado === 'MANTENIMIENTO') return 'st-mant';
+      if (estado === 'AVERIA') return 'st-averia';
+      if (estado === 'STAND STILL') return 'st-standstill';
+      return 'st-nomant';
+    }
+
+    // =========================================================================
+    // 2. PESTAÑA VÍAS Y FOSO (SIN 'UT' NI '[OCUPADA]', DIRECTAMENTE EL NÚMERO)
+    // =========================================================================
+    function renderVias() {
+      var cont = document.getElementById('vias-cards-list');
+      cont.innerHTML = '';
+
+      appVias.forEach(function(v, idx) {
+        var card = document.createElement('div');
+        var ocupada = !!v.unit;
+        card.className = `bg-slate-900 border-2 rounded-2xl p-3.5 space-y-2.5 shadow-xl transition ${ocupada ? 'border-sky-500/70' : 'border-slate-800'}`;
+
+        // Seccionador
+        var seccHtml = '';
+        if (v.secc === 'TENSION') {
+          seccHtml = `
+            <button onclick="toggleViaSeccionador(${idx})" class="bg-rose-950 border-2 border-rose-500 text-rose-300 px-3 py-1.5 rounded-xl font-black text-xs flex items-center gap-1.5 shadow-lg active:scale-95 transition">
+              <span class="w-2.5 h-2.5 rounded-full bg-rose-500 animate-pulse"></span>
+              <span>1.5 kV CON TENSIÓN</span>
+            </button>`;
+        } else if (v.secc === 'TIERRA') {
+          seccHtml = `
+            <button onclick="toggleViaSeccionador(${idx})" class="bg-emerald-950 border-2 border-emerald-500 text-emerald-300 px-3 py-1.5 rounded-xl font-black text-xs flex items-center gap-1.5 shadow-lg active:scale-95 transition">
+              <i class="ph-bold ph-shield-check text-sm"></i>
+              <span>A TIERRA (DESCARGO)</span>
+            </button>`;
+        } else {
+          seccHtml = `<span class="text-[11px] text-slate-500 font-bold px-2 py-1">Sin Catenaria</span>`;
+        }
+
+        // Tren y Trabajo: SIN "UT" NI "[OCUPADA]"
+        var ocupHtml = ocupada ? `
+          <div class="space-y-1">
+            <div class="text-3xl sm:text-4xl font-black text-white font-mono tracking-tight leading-none">
+              ${v.unit}
+            </div>
+            <div class="text-xs font-bold text-amber-300 flex items-center gap-1.5">
+              <i class="ph-bold ph-wrench text-sky-400"></i>
+              <span>${v.trabajo || 'Sin trabajo especificado'}</span>
+            </div>
+          </div>
+        ` : `
+          <div class="py-1">
+            <span class="text-lg font-black text-emerald-400 tracking-wide">VÍA LIBRE</span>
+            <div class="text-[11px] text-slate-500 font-bold">Disponible para maniobra</div>
+          </div>
+        `;
+
+        card.innerHTML = `
+          <div class="flex items-center justify-between border-b border-slate-800 pb-2">
+            <h3 class="text-xs font-black text-white tracking-wider flex items-center gap-1.5 uppercase">
+              <i class="ph-bold ph-git-fork text-sky-400"></i> ${v.name}
+            </h3>
+            ${seccHtml}
+          </div>
+          <div class="flex items-center justify-between pt-1">
+            ${ocupHtml}
+            <button onclick="promptEditVia(${idx})" class="py-2 px-3.5 bg-slate-800 hover:bg-slate-700 text-sky-300 font-black text-xs rounded-xl border border-slate-700 active:scale-95 transition">
+              ${ocupada ? 'Editar' : 'Ocupar'}
+            </button>
+          </div>
+        `;
+        cont.appendChild(card);
+      });
+    }
+
+    function toggleViaSeccionador(idx) {
+      if (appVias[idx].secc === 'TENSION') appVias[idx].secc = 'TIERRA';
+      else if (appVias[idx].secc === 'TIERRA') appVias[idx].secc = 'TENSION';
+      saveAllStorage();
+      renderVias();
+    }
+
+    function promptEditVia(idx) {
+      var v = appVias[idx];
+      var u = prompt("Número de unidad en " + v.name + " (o vacío para liberar vía):", v.unit || "");
+      if (u !== null) {
+        var cleanU = u.trim();
+        v.unit = cleanU ? cleanU : null;
+        if (cleanU) {
+          var w = prompt("Trabajo en curso:", v.trabajo || "Preventivo / Correctivo");
+          v.trabajo = w !== null ? w : "";
+          if (appFleet[cleanU]) {
+            appFleet[cleanU].situacion = 'En Taller / Foso (' + v.name + ')';
+            appFleet[cleanU].estado = 'MANTENIMIENTO';
+            if (v.trabajo) appFleet[cleanU].nota = v.trabajo;
+          }
+        } else {
+          v.trabajo = "";
+        }
+        saveAllStorage();
+        renderVias();
+        renderDisponibilidad();
+      }
+    }
+
+    // =========================================================================
+    // 3. PESTAÑA TURNOS (M, T, GM, GT, FM, FT, D, V, B - DÍA ACTUAL RESALTADO)
+    // =========================================================================
+    var turnosDays = [
+      { date: "30/3", dow: "L", festivo: false, finSemana: false },
+      { date: "31/3", dow: "M", festivo: false, finSemana: false },
+      { date: "1/4",  dow: "X", festivo: false, finSemana: false },
+      { date: "2/4",  dow: "J", festivo: false, finSemana: false },
+      { date: "3/4",  dow: "V", festivo: false, finSemana: false },
+      { date: "4/4",  dow: "S", festivo: false, finSemana: true },
+      { date: "5/4",  dow: "D", festivo: false, finSemana: true },
+      { date: "6/4",  dow: "L", festivo: false, finSemana: false },
+      { date: "7/4",  dow: "M", festivo: false, finSemana: false },
+      { date: "8/4",  dow: "X", festivo: false, finSemana: false },
+      { date: "9/4",  dow: "J", festivo: true,  finSemana: false },
+      { date: "10/4", dow: "V", festivo: true,  finSemana: false },
+      { date: "11/4", dow: "S", festivo: false, finSemana: true },
+      { date: "12/4", dow: "D", festivo: false, finSemana: true },
+      { date: "13/4", dow: "L", festivo: true,  finSemana: false },
+      { date: "14/4", dow: "M", festivo: false, finSemana: false },
+      { date: "15/4", dow: "X", festivo: false, finSemana: false },
+      { date: "16/4", dow: "J", festivo: false, finSemana: false },
+      { date: "17/4", dow: "V", festivo: false, finSemana: false },
+      { date: "18/4", dow: "S", festivo: false, finSemana: true },
+      { date: "19/4", dow: "D", festivo: false, finSemana: true }
+    ];
+
+    function initDefaultTurnos() {
+      // Sin turno 'N' (sustituidos por GM/GT/M/T)
+      appTurnosCalendar = [
+        { apellidos: "SEBASTIAN", nombre: "BRUNO", puesto: "ALMACEN", turnos: { "30/3":"M","31/3":"M","1/4":"M","2/4":"M","3/4":"M","4/4":"D","5/4":"D","6/4":"M","7/4":"M","8/4":"M","9/4":"FM","10/4":"FM","11/4":"D","12/4":"D","13/4":"FM","14/4":"M","15/4":"M","16/4":"M","17/4":"M","18/4":"D","19/4":"D" } },
+        { apellidos: "MEDINA", nombre: "JORGE", puesto: "ALMACEN", turnos: { "30/3":"T","31/3":"T","1/4":"T","2/4":"T","3/4":"T","4/4":"D","5/4":"D","6/4":"T","7/4":"T","8/4":"T","9/4":"FT","10/4":"FT","11/4":"D","12/4":"D","13/4":"FT","14/4":"T","15/4":"T","16/4":"T","17/4":"T","18/4":"D","19/4":"D" } },
+        { apellidos: "PAEZ", nombre: "ANTONIO", puesto: "S.CORRECTIVO", turnos: { "30/3":"T","31/3":"T","1/4":"T","2/4":"T","3/4":"T","4/4":"D","5/4":"D","6/4":"T","7/4":"T","8/4":"T","9/4":"FT","10/4":"FT","11/4":"D","12/4":"D","13/4":"FT","14/4":"T","15/4":"T","16/4":"T","17/4":"T","18/4":"GT","19/4":"GT" } },
+        { apellidos: "KARATZLA", nombre: "SEVIM", puesto: "T.CORRECTIVO", turnos: { "30/3":"D","31/3":"D","1/4":"T","2/4":"T","3/4":"T","4/4":"T","5/4":"T","6/4":"D","7/4":"D","8/4":"D","9/4":"T","10/4":"T","11/4":"T","12/4":"T","13/4":"T","14/4":"D","15/4":"D","16/4":"D","17/4":"T","18/4":"T","19/4":"T" } },
+        { apellidos: "STEFANOV", nombre: "KALIN", puesto: "T.CORRECTIVO", turnos: { "30/3":"T","31/3":"T","1/4":"T","2/4":"T","3/4":"T","4/4":"D","5/4":"D","6/4":"T","7/4":"T","8/4":"T","9/4":"GT","10/4":"GT","11/4":"D","12/4":"D","13/4":"GT","14/4":"T","15/4":"T","16/4":"T","17/4":"T","18/4":"D","19/4":"D" } },
+        { apellidos: "ESTRADA", nombre: "EMANUEL", puesto: "S.CORRECTIVO", turnos: { "30/3":"M","31/3":"M","1/4":"M","2/4":"M","3/4":"M","4/4":"D","5/4":"D","6/4":"GM","7/4":"GM","8/4":"GM","9/4":"FM","10/4":"FM","11/4":"GT","12/4":"GT","13/4":"FM","14/4":"M","15/4":"M","16/4":"M","17/4":"M","18/4":"D","19/4":"D" } },
+        { apellidos: "MESQUIDA", nombre: "FRANCESC", puesto: "T.CORRECTIVO", turnos: { "30/3":"GM","31/3":"GM","1/4":"GM","2/4":"GM","3/4":"GM","4/4":"D","5/4":"D","6/4":"GM","7/4":"GM","8/4":"GM","9/4":"FM","10/4":"FM","11/4":"D","12/4":"D","13/4":"FM","14/4":"GM","15/4":"GM","16/4":"GM","17/4":"GM","18/4":"D","19/4":"D" } },
+        { apellidos: "GUTIERRE", nombre: "FRANCISC", puesto: "T.CORRECTIVO", turnos: { "30/3":"M","31/3":"M","1/4":"M","2/4":"M","3/4":"M","4/4":"D","5/4":"D","6/4":"T","7/4":"T","8/4":"T","9/4":"FT","10/4":"FT","11/4":"D","12/4":"D","13/4":"FT","14/4":"M","15/4":"M","16/4":"M","17/4":"M","18/4":"D","19/4":"D" } },
+        { apellidos: "PIZARRO", nombre: "JUAN", puesto: "S.PREVENTIVO", turnos: { "30/3":"B","31/3":"B","1/4":"B","2/4":"B","3/4":"B","4/4":"D","5/4":"D","6/4":"B","7/4":"B","8/4":"B","9/4":"B","10/4":"B","11/4":"D","12/4":"D","13/4":"B","14/4":"B","15/4":"B","16/4":"B","17/4":"B","18/4":"D","19/4":"D" } },
+        { apellidos: "VALLESPIR", nombre: "JOAN", puesto: "T.PREVENTIVO", turnos: { "30/3":"GM","31/3":"GM","1/4":"GM","2/4":"GM","3/4":"GM","4/4":"D","5/4":"D","6/4":"GM","7/4":"GM","8/4":"GM","9/4":"FM","10/4":"FM","11/4":"D","12/4":"D","13/4":"FM","14/4":"V","15/4":"V","16/4":"V","17/4":"V","18/4":"D","19/4":"D" } },
+        { apellidos: "MORENO", nombre: "RAUL", puesto: "T.PREVENTIVO", turnos: { "30/3":"M","31/3":"M","1/4":"M","2/4":"M","3/4":"M","4/4":"D","5/4":"D","6/4":"M","7/4":"D","8/4":"D","9/4":"FM","10/4":"FM","11/4":"T","12/4":"T","13/4":"FM","14/4":"M","15/4":"M","16/4":"M","17/4":"T","18/4":"D","19/4":"D" } },
+        { apellidos: "ROIG", nombre: "MATEO", puesto: "T.PREVENTIVO", turnos: { "30/3":"T","31/3":"T","1/4":"T","2/4":"D","3/4":"D","4/4":"T","5/4":"T","6/4":"V","7/4":"V","8/4":"V","9/4":"FT","10/4":"FT","11/4":"D","12/4":"D","13/4":"FT","14/4":"V","15/4":"V","16/4":"V","17/4":"V","18/4":"D","19/4":"D" } },
+        { apellidos: "ALVARADO", nombre: "RENE", puesto: "T.PREVENTIVO", turnos: { "30/3":"M","31/3":"M","1/4":"M","2/4":"M","3/4":"M","4/4":"D","5/4":"D","6/4":"M","7/4":"M","8/4":"M","9/4":"FM","10/4":"FM","11/4":"D","12/4":"D","13/4":"FM","14/4":"M","15/4":"M","16/4":"M","17/4":"M","18/4":"D","19/4":"D" } }
+      ];
+      saveAllStorage();
+    }
+
+    // FILTRO DE TURNOS: SOLO TODOS, M, T
+    function setTurnoFilter(flt) {
+      currentTurnoFilter = flt;
+      ['TODOS', 'M', 'T'].forEach(function(b) {
+        var el = document.getElementById('btn-flt-' + b);
+        if (el) {
+          if (b === flt) {
+            el.className = 'px-3 py-1 rounded-lg bg-sky-600 text-white shadow';
+          } else {
+            el.className = 'px-3 py-1 rounded-lg bg-slate-800 text-slate-400 border border-slate-700';
+          }
+        }
+      });
+      renderTurnos();
+    }
+
+    function prevWeekTurnos() {
+      if (currentWeekOffset > 0) {
+        currentWeekOffset -= 7;
+        renderTurnos();
+      }
+    }
+
+    function nextWeekTurnos() {
+      if (currentWeekOffset + 7 < turnosDays.length) {
+        currentWeekOffset += 7;
+        renderTurnos();
+      }
+    }
+
+    function setHighlightedDay(dateStr) {
+      activeHighlightedDay = dateStr;
+      renderTurnos();
+    }
+
+    function renderTurnos() {
+      var thead = document.getElementById('turnos-table-head');
+      var tbody = document.getElementById('turnos-table-body');
+      thead.innerHTML = '';
+      tbody.innerHTML = '';
+
+      var visibleDays = turnosDays.slice(currentWeekOffset, currentWeekOffset + 7);
+      if (visibleDays.length === 0) visibleDays = turnosDays.slice(0, 7);
+
+      document.getElementById('turnos-week-title').textContent = visibleDays[0].date + " - " + visibleDays[visibleDays.length - 1].date;
+
+      // Cabecera con columna del día actual resaltada
+      var headHtml = `
+        <tr>
+          <th class="py-2 px-2.5 sticky left-0 bg-[#001730] z-20 border-r border-slate-800 w-36">Técnico / Área</th>
+      `;
+      visibleDays.forEach(function(d) {
+        var isToday = (d.date === activeHighlightedDay);
+        var baseClass = d.festivo ? 'bg-red-950 text-white' : (d.finSemana ? 'bg-slate-900 text-slate-300' : 'bg-transparent text-sky-200');
+        var todayClass = isToday ? 'col-today-header' : '';
+
+        headHtml += `
+          <th onclick="setHighlightedDay('${d.date}')" class="py-1.5 px-1 text-center border-r border-slate-800 cursor-pointer ${baseClass} ${todayClass} w-9 transition" title="Toca para marcar como día actual">
+            ${isToday ? '<div class="text-[8px] bg-slate-950 text-sky-300 rounded px-0.5 font-bold mb-0.5">HOY</div>' : ''}
+            <div class="text-[9px] font-bold font-mono leading-none">${d.date}</div>
+            <div class="text-[10px] font-black">${d.dow}</div>
+          </th>
+        `;
+      });
+      headHtml += `</tr>`;
+      thead.innerHTML = headHtml;
+
+      // Filtrado: Todos, Mañana (M) o Tarde (T)
+      var filtrados = appTurnosCalendar.filter(function(p) {
+        if (currentTurnoFilter === 'TODOS') return true;
+        return visibleDays.some(function(d) {
+          var tVal = p.turnos[d.date] || '';
+          return tVal === currentTurnoFilter || tVal.indexOf(currentTurnoFilter) === 0;
+        });
+      });
+
+      if (filtrados.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="8" class="text-center py-6 text-slate-500 font-medium">No hay técnicos asignados a este turno en la semana.</td></tr>`;
+        return;
+      }
+
+      // Filas con la columna del día actual resaltada verticalmente
+      filtrados.forEach(function(p) {
+        var tr = document.createElement('tr');
+        tr.className = 'hover:bg-slate-850/50 transition';
+
+        var puestoBadge = p.puesto.indexOf('CORRECTIVO') !== -1 ? 'text-amber-400' : (p.puesto.indexOf('PREVENTIVO') !== -1 ? 'text-teal-400' : 'text-slate-400');
+        var rowHtml = `
+          <td class="py-1.5 px-2.5 sticky left-0 bg-slate-900 z-10 border-r border-slate-800 shadow-sm leading-tight">
+            <div class="text-xs font-black text-white font-mono">${p.apellidos} ${p.nombre}</div>
+            <div class="text-[9px] font-bold ${puestoBadge} uppercase">${p.puesto}</div>
+          </td>
+        `;
+
+        visibleDays.forEach(function(d) {
+          var val = (p.turnos[d.date] || 'D').toUpperCase().trim();
+          var cssTurno = getTurnoCssClass(val);
+          var isToday = (d.date === activeHighlightedDay);
+          var todayColClass = isToday ? 'col-today-cell' : '';
+
+          rowHtml += `
+            <td onclick="openEditTurnoModal('${p.apellidos} ${p.nombre}', '${d.date}')" class="p-0.5 text-center border-r border-slate-800/80 cursor-pointer ${todayColClass}">
+              <div class="w-8 h-7 leading-7 mx-auto rounded-lg text-xs font-black transition active:scale-90 ${cssTurno}">
+                ${val}
+              </div>
+            </td>
+          `;
+        });
+
+        tr.innerHTML = rowHtml;
+        tbody.appendChild(tr);
+      });
+    }
+
+    function getTurnoCssClass(val) {
+      if (val === 'M') return 'cell-m';
+      if (val === 'T') return 'cell-t';
+      if (val === 'GM') return 'cell-gm';
+      if (val === 'GT' || val === 'GT/T') return 'cell-gt';
+      if (val === 'FM') return 'cell-fm';
+      if (val === 'FT') return 'cell-ft';
+      if (val === 'V') return 'cell-v';
+      if (val === 'B') return 'cell-b';
+      return 'cell-d';
+    }
+
+    // Modal de edición de casilla de turno
+    var editingTurnoTarget = { nombre: '', date: '' };
+
+    function openEditTurnoModal(nombre, date) {
+      editingTurnoTarget = { nombre: nombre, date: date };
+      document.getElementById('m-turno-nombre').textContent = nombre;
+      document.getElementById('m-turno-fecha').textContent = 'Fecha: ' + date;
+      document.getElementById('modal-edit-turno').classList.remove('hidden');
+    }
+
+    function closeEditTurnoModal() {
+      document.getElementById('modal-edit-turno').classList.add('hidden');
+    }
+
+    function applyTurnoCode(code) {
+      var p = appTurnosCalendar.find(function(x){ return (x.apellidos + ' ' + x.nombre) === editingTurnoTarget.nombre; });
+      if (p) {
+        p.turnos[editingTurnoTarget.date] = code;
+        saveAllStorage();
+        renderTurnos();
+      }
+      closeEditTurnoModal();
+    }
+
+    function handleTurnosUpload(event) {
+      var file = event.target.files[0];
+      if (!file) return;
+
+      var reader = new FileReader();
+      reader.onload = function(e) {
+        try {
+          var data = new Uint8Array(e.target.result);
+          var wb = XLSX.read(data, { type: 'array' });
+          var ws = wb.Sheets[wb.SheetNames[0]];
+          var json = XLSX.utils.sheet_to_json(ws, { header: 1 });
+
+          if (!json || json.length < 2) {
+            alert("El archivo no contiene suficientes datos.");
+            return;
+          }
+
+          var headerRow = json[0];
+          var dateCols = [];
+          for (var c = 3; c < headerRow.length; c++) {
+            if (headerRow[c]) dateCols.push({ col: c, date: String(headerRow[c]).trim() });
+          }
+
+          var parsedList = [];
+          for (var r = 1; r < json.length; r++) {
+            var row = json[r];
+            if (!row || !row[0]) continue;
+            var ap = String(row[0] || '').trim();
+            var nom = String(row[1] || '').trim();
+            var puesto = String(row[2] || 'TALLER').trim();
+            if (!ap && !nom) continue;
+
+            var turnosObj = {};
+            dateCols.forEach(function(dc) {
+              var val = row[dc.col] ? String(row[dc.col]).trim().toUpperCase() : 'D';
+              // Convertir 'N' en 'GM' si viniese en plantillas antiguas
+              if (val === 'N') val = 'GM';
+              turnosObj[dc.date] = val;
+            });
+
+            parsedList.push({ apellidos: ap, nombre: nom, puesto: puesto, turnos: turnosObj });
+          }
+
+          if (parsedList.length > 0) {
+            appTurnosCalendar = parsedList;
+            saveAllStorage();
+            renderTurnos();
+            alert("¡Cargados con éxito " + parsedList.length + " técnicos!");
+          }
+        } catch(err) {
+          alert("Error al leer Excel: " + err.message);
+        }
+      };
+      reader.readAsArrayBuffer(file);
+    }
+
+    function loadSampleTurnosReal() {
+      initDefaultTurnos();
+      renderTurnos();
+    }
+
+    // =========================================================================
+    // MODAL DE UNIDAD (CAMBIO DE ESTADO)
+    // =========================================================================
+    var activeModalUnitId = null;
+    var modalTempStatus = 'DISPONIBLE';
+
+    function openUnitModal(uId) {
+      activeModalUnitId = uId;
+      var meta = SFM_FLOTA_DATA.find(function(x){ return x.id === uId; });
+      var st = appFleet[uId] || { estado: 'DISPONIBLE', situacion: 'En Circulación', nota: '' };
+
+      document.getElementById('m-unit-code').textContent = uId;
+      document.getElementById('m-unit-serie').textContent = 'SERIE ' + meta.serie;
+      document.getElementById('m-unit-comp').textContent = meta.comp;
+
+      setModalStatus(st.estado);
+      document.getElementById('m-unit-situacion').value = st.situacion || 'En Circulación (Línea)';
+      document.getElementById('m-unit-nota').value = st.nota || '';
+
+      document.getElementById('modal-unit').classList.remove('hidden');
+    }
+
+    function closeUnitModal() {
+      document.getElementById('modal-unit').classList.add('hidden');
+      activeModalUnitId = null;
+    }
+
+    function setModalStatus(st) {
+      modalTempStatus = st;
+      var list = ['DISPONIBLE', 'DISPONIBLE CON RESTRICCIONES', 'MANTENIMIENTO', 'AVERIA', 'DISPONIBLE SON RULLAN', 'STAND STILL'];
+      list.forEach(function(item) {
+        var btn = document.getElementById('btn-st-' + item);
+        if (btn) {
+          if (item === st) {
+            btn.style.outline = "3px solid #38bdf8";
+            btn.style.transform = "scale(1.02)";
+          } else {
+            btn.style.outline = "none";
+            btn.style.transform = "scale(1)";
+          }
+        }
+      });
+    }
+
+    function saveUnitModalChanges() {
+      if (!activeModalUnitId) return;
+      var sit = document.getElementById('m-unit-situacion').value;
+      var not = document.getElementById('m-unit-nota').value.trim();
+
+      appFleet[activeModalUnitId] = {
+        estado: modalTempStatus,
+        situacion: sit,
+        nota: not
+      };
+
+      saveAllStorage();
+      closeUnitModal();
+      renderDisponibilidad();
+    }
+
+    // =========================================================================
+    // MODAL REQUISITOS CLIENTE
+    // =========================================================================
+    function openRequirementsModal() {
+      document.getElementById('req-8100x3').value = appReqs["8100x3"] || 4;
+      document.getElementById('req-8100x4').value = appReqs["8100x4"] || 6;
+      document.getElementById('req-7100').value = appReqs["7100"] || 4;
+      document.getElementById('req-1100').value = appReqs["1100"] || 4;
+      document.getElementById('req-9100').value = appReqs["9100"] || 4;
+      document.getElementById('modal-reqs').classList.remove('hidden');
+    }
+
+    function closeRequirementsModal() {
+      document.getElementById('modal-reqs').classList.add('hidden');
+    }
+
+    function saveRequirements() {
+      appReqs["8100x3"] = parseInt(document.getElementById('req-8100x3').value) || 0;
+      appReqs["8100x4"] = parseInt(document.getElementById('req-8100x4').value) || 0;
+      appReqs["7100"] = parseInt(document.getElementById('req-7100').value) || 0;
+      appReqs["1100"] = parseInt(document.getElementById('req-1100').value) || 0;
+      appReqs["9100"] = parseInt(document.getElementById('req-9100').value) || 0;
+      saveAllStorage();
+      closeRequirementsModal();
+      renderDisponibilidad();
+    }
+
+    // CONMUTACIÓN DE PESTAÑAS PRINCIPALES
+    function switchTab(tId) {
+      ['disponibilidad', 'vias', 'turnos'].forEach(function(t) {
+        var view = document.getElementById('view-' + t);
+        var navBtn = document.getElementById('nav-btn-' + t);
+        if (t === tId) {
+          view.classList.remove('hidden');
+          navBtn.className = 'py-2.5 flex flex-col items-center gap-0.5 text-sky-400 font-black transition';
+        } else {
+          view.classList.add('hidden');
+          navBtn.className = 'py-2.5 flex flex-col items-center gap-0.5 text-slate-400 font-bold transition';
+        }
+      });
+      if (tId === 'disponibilidad') renderDisponibilidad();
+      else if (tId === 'vias') renderVias();
+      else if (tId === 'turnos') renderTurnos();
+    }
+  </script>
+</body>
+</html>
