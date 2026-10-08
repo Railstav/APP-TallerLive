@@ -12,6 +12,10 @@
   <!-- SheetJS para lectura de Excel (.xlsx / .csv) -->
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 
+  <!-- FIREBASE REALTIME DATABASE (SDK v9 Compat) -->
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+
   <style>
     body {
       -webkit-tap-highlight-color: transparent;
@@ -21,7 +25,7 @@
     .pb-safe { padding-bottom: env(safe-area-inset-bottom, 16px); }
     .pt-safe { padding-top: env(safe-area-inset-top, 8px); }
 
-    /* BLOQUE DE ESTADO FIJO: Dimensiones estrictamente fijas para que todos sean idénticos */
+    /* BLOQUE DE ESTADO FIJO (142px x 52px) */
     .status-pill-fixed {
       width: 142px;
       min-width: 142px;
@@ -38,7 +42,6 @@
       flex-shrink: 0;
     }
 
-    /* Colores y degradados de estado de flota */
     .st-disp {
       background: linear-gradient(135deg, #10b981 0%, #059669 100%);
       color: #ffffff;
@@ -75,16 +78,16 @@
       border: 1px solid #334155;
     }
 
-    /* Colores de celdas del cuadrante de turnos */
-    .cell-m { background-color: #38bdf8; color: #021325; font-weight: 900; }  /* Mañana */
-    .cell-t { background-color: #bef264; color: #142e03; font-weight: 900; }  /* Tarde */
-    .cell-gm { background-color: #2563eb; color: #ffffff; font-weight: 900; } /* Guardia Mañana */
-    .cell-gt { background-color: #06b6d4; color: #000000; font-weight: 900; } /* Guardia Tarde */
-    .cell-fm { background-color: #f97316; color: #ffffff; font-weight: 900; } /* Festivo Mañana */
-    .cell-ft { background-color: #ef4444; color: #ffffff; font-weight: 900; } /* Festivo Tarde */
-    .cell-d { background-color: #334155; color: #94a3b8; font-weight: 700; }  /* Descanso */
-    .cell-v { background-color: #e11d48; color: #ffffff; font-weight: 900; }  /* Vacaciones */
-    .cell-b { background-color: #8b5cf6; color: #ffffff; font-weight: 900; }  /* Baja */
+    /* Colores turnos */
+    .cell-m { background-color: #38bdf8; color: #021325; font-weight: 900; }
+    .cell-t { background-color: #bef264; color: #142e03; font-weight: 900; }
+    .cell-gm { background-color: #2563eb; color: #ffffff; font-weight: 900; }
+    .cell-gt { background-color: #06b6d4; color: #000000; font-weight: 900; }
+    .cell-fm { background-color: #f97316; color: #ffffff; font-weight: 900; }
+    .cell-ft { background-color: #ef4444; color: #ffffff; font-weight: 900; }
+    .cell-d { background-color: #334155; color: #94a3b8; font-weight: 700; }
+    .cell-v { background-color: #e11d48; color: #ffffff; font-weight: 900; }
+    .cell-b { background-color: #8b5cf6; color: #ffffff; font-weight: 900; }
 
     /* Resaltado vertical de columna del día actual */
     .col-today-header {
@@ -112,11 +115,14 @@
         <h1 class="text-xs font-black text-white tracking-wider flex items-center gap-1.5 leading-tight">
           TALLER LIVE <span class="text-[9px] bg-sky-400 text-slate-950 px-1.5 py-0.2 rounded font-black">SFM</span>
         </h1>
-        <p class="text-[9px] text-sky-300 font-bold uppercase tracking-tight">Son Rullán · Supervisión</p>
+        <div class="flex items-center gap-1.5 text-[9px] font-bold">
+          <span class="w-1.5 h-1.5 rounded-full bg-slate-500" id="firebase-dot"></span>
+          <span class="text-sky-300 uppercase tracking-tight" id="firebase-status-text">Conectando...</span>
+        </div>
       </div>
     </div>
 
-    <!-- Indicador global rápido (Abre modal de requisitos) -->
+    <!-- Indicador global de disponibilidad (abre modal de requisitos) -->
     <div onclick="openRequirementsModal()" class="flex items-center gap-2 bg-slate-900 border border-sky-500/30 px-2.5 py-1 rounded-xl cursor-pointer active:scale-95 transition" title="Toca para ajustar mínimos">
       <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
       <div class="text-right leading-none">
@@ -135,7 +141,7 @@
     <!-- ========================================================================= -->
     <section id="view-disponibilidad" class="space-y-3">
       
-      <!-- 1.1 TARJETA SUPERIOR DE DISPONIBILIDAD (TOCA DIRECTAMENTE PARA AJUSTAR MÍNIMOS) -->
+      <!-- 1.1 TARJETA SUPERIOR DE DISPONIBILIDAD -->
       <div class="bg-gradient-to-br from-slate-900 via-slate-900 to-[#001730] border-2 border-sky-500/50 rounded-2xl p-3 shadow-xl">
         <div class="flex items-center justify-between border-b border-slate-800 pb-2 mb-2">
           <div class="flex items-center gap-2">
@@ -144,16 +150,14 @@
             </div>
             <div>
               <h2 class="text-xs font-black text-white uppercase tracking-wider">Disponibilidad Flota SFM</h2>
-              <p class="text-[10px] text-slate-400 font-medium">30 Unidades · Toca una serie para configurar mínimos</p>
+              <p class="text-[10px] text-slate-400 font-medium">30 Unidades · Toca una tarjeta para ajustar mínimos</p>
             </div>
           </div>
           <div class="text-[10px] text-sky-400 font-bold font-mono" id="summary-percentage-badge">100%</div>
         </div>
 
-        <!-- Malla de Contadores: Al pulsar abre directamente el ajuste de mínimos -->
-        <div class="grid grid-cols-6 gap-1 text-center" id="summary-kpis-grid">
-          <!-- Render dinámico: TOTAL, 8100x3, 8100x4, 7100, 1100, 9100 -->
-        </div>
+        <!-- Malla de Contadores -->
+        <div class="grid grid-cols-6 gap-1 text-center" id="summary-kpis-grid"></div>
 
         <!-- Barra de progreso visual -->
         <div class="mt-2.5 bg-slate-950 rounded-full h-2 overflow-hidden border border-slate-800 flex">
@@ -177,14 +181,11 @@
       </div>
 
       <!-- 1.2 CONTENEDOR DE SERIES EN ORDEN: 8100x3, 8100x4, 7100, 1100, 9100 -->
-      <div class="space-y-2.5" id="series-accordion-container">
-        <!-- Render dinámico de las 5 series -->
-      </div>
+      <div class="space-y-2.5" id="series-accordion-container"></div>
     </section>
 
-
     <!-- ========================================================================= -->
-    <!-- PESTAÑA 2: VÍAS Y FOSO (SIN 'UT' NI '[OCUPADA]', MÁS LIMPIO)                -->
+    <!-- PESTAÑA 2: VÍAS Y FOSO                                                     -->
     <!-- ========================================================================= -->
     <section id="view-vias" class="space-y-2.5 hidden">
       <div class="flex items-center justify-between px-1">
@@ -196,17 +197,13 @@
         </span>
       </div>
 
-      <div class="space-y-2.5" id="vias-cards-list">
-        <!-- Render dinámico de vías -->
-      </div>
+      <div class="space-y-2.5" id="vias-cards-list"></div>
     </section>
 
-
     <!-- ========================================================================= -->
-    <!-- PESTAÑA 3: TURNOS (SOLO M Y T, NUEVOS TURNOS, COLUMNA DE HOY RESALTADA)   -->
+    <!-- PESTAÑA 3: TURNOS                                                         -->
     <!-- ========================================================================= -->
     <section id="view-turnos" class="space-y-2.5 hidden">
-      
       <div class="bg-slate-900 border border-slate-800 rounded-xl p-2.5 space-y-2 shadow-md">
         <div class="flex items-center justify-between">
           <div class="flex items-center gap-1.5">
@@ -216,7 +213,6 @@
             <span class="text-[9px] bg-slate-800 text-sky-300 px-1.5 py-0.5 rounded font-mono font-bold" id="turnos-active-range">Abril 2026</span>
           </div>
 
-          <!-- Botón de carga compacto -->
           <div class="flex items-center gap-1.5">
             <label class="bg-sky-600 hover:bg-sky-500 text-slate-950 font-black text-[10px] py-1 px-2.5 rounded-lg flex items-center gap-1 cursor-pointer active:scale-95 transition shadow">
               <i class="ph-bold ph-upload-simple"></i>
@@ -229,14 +225,12 @@
           </div>
         </div>
 
-        <!-- SOLO FILTROS: TODOS, MAÑANA Y TARDE -->
         <div class="flex items-center gap-1.5 overflow-x-auto pb-0.5 text-[11px] font-bold">
           <button onclick="setTurnoFilter('TODOS')" id="btn-flt-TODOS" class="px-3 py-1 rounded-lg bg-sky-600 text-white shadow">Todos</button>
           <button onclick="setTurnoFilter('M')" id="btn-flt-M" class="px-3 py-1 rounded-lg bg-slate-800 text-sky-300 border border-slate-700">Mañana (M)</button>
           <button onclick="setTurnoFilter('T')" id="btn-flt-T" class="px-3 py-1 rounded-lg bg-slate-800 text-lime-300 border border-slate-700">Tarde (T)</button>
         </div>
 
-        <!-- Selector de Semana -->
         <div class="flex items-center justify-between bg-slate-950 p-1.5 rounded-lg border border-slate-800 text-xs">
           <button onclick="prevWeekTurnos()" class="text-slate-400 hover:text-white px-2 py-0.5 rounded bg-slate-900 border border-slate-800 font-bold">
             ◀ Anterior
@@ -248,7 +242,6 @@
         </div>
       </div>
 
-      <!-- Leyenda de colores -->
       <div class="flex items-center justify-between text-[9px] font-black px-1.5 text-slate-400 overflow-x-auto gap-2">
         <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded cell-m inline-block"></span> M: Mañ</span>
         <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded cell-t inline-block"></span> T: Tard</span>
@@ -258,28 +251,24 @@
         <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded cell-ft inline-block"></span> FT: F.Tard</span>
       </div>
 
-      <!-- TABLA CUADRANTE CON DÍA ACTUAL RESALTADO EN TODA LA COLUMNA -->
       <div class="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-2xl">
         <div class="overflow-x-auto">
           <table class="w-full text-left text-xs whitespace-nowrap" id="table-turnos-main">
-            <thead class="bg-[#001730] text-white uppercase text-[10px] font-black border-b border-sky-600" id="turnos-table-head">
-              <!-- Cabecera dinámica con día actual resaltado -->
-            </thead>
-            <tbody id="turnos-table-body" class="divide-y divide-slate-800 font-bold">
-              <!-- Filas dinámicas -->
-            </tbody>
+            <thead class="bg-[#001730] text-white uppercase text-[10px] font-black border-b border-sky-600" id="turnos-table-head"></thead>
+            <tbody id="turnos-table-body" class="divide-y divide-slate-800 font-bold"></tbody>
           </table>
         </div>
       </div>
-      <p class="text-[10px] text-slate-500 italic text-center">Toca cualquier casilla para modificar el turno del técnico.</p>
+      <p class="text-[10px] text-slate-500 italic text-center">Toca cualquier casilla para modificar el turno.</p>
     </section>
 
   </main>
 
-
   <!-- ========================================================================= -->
-  <!-- MODAL: CAMBIO RÁPIDO DE ESTADO DE UNIDAD                                  -->
+  <!-- MODALES                                                                   -->
   <!-- ========================================================================= -->
+  
+  <!-- Modal Unidad -->
   <div id="modal-unit" class="fixed inset-0 bg-black/85 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 hidden">
     <div class="bg-slate-900 border-t-2 sm:border-2 border-sky-500 w-full max-w-sm rounded-t-3xl sm:rounded-2xl p-4 space-y-3 shadow-2xl">
       <div class="flex items-center justify-between border-b border-slate-800 pb-2">
@@ -293,32 +282,18 @@
         </button>
       </div>
 
-      <!-- Estados con estética moderna -->
       <div class="space-y-1.5">
         <label class="block text-[11px] font-black text-slate-300 uppercase">Seleccionar Estado:</label>
         <div class="grid grid-cols-2 gap-1.5">
-          <button onclick="setModalStatus('DISPONIBLE')" id="btn-st-DISPONIBLE" class="p-2.5 rounded-xl text-xs font-black text-center transition st-disp">
-            DISPONIBLE
-          </button>
-          <button onclick="setModalStatus('DISPONIBLE CON RESTRICCIONES')" id="btn-st-DISPONIBLE CON RESTRICCIONES" class="p-2.5 rounded-xl text-[11px] font-black text-center transition st-restr leading-tight">
-            DISP. RESTRICCIÓN
-          </button>
-          <button onclick="setModalStatus('MANTENIMIENTO')" id="btn-st-MANTENIMIENTO" class="p-2.5 rounded-xl text-xs font-black text-center transition st-mant">
-            MANTENIMIENTO
-          </button>
-          <button onclick="setModalStatus('AVERIA')" id="btn-st-AVERIA" class="p-2.5 rounded-xl text-xs font-black text-center transition st-averia">
-            AVERÍA
-          </button>
-          <button onclick="setModalStatus('DISPONIBLE SON RULLAN')" id="btn-st-DISPONIBLE SON RULLAN" class="p-2.5 rounded-xl text-[11px] font-black text-center transition st-disp-sr">
-            DISP. SON RULLÁN
-          </button>
-          <button onclick="setModalStatus('STAND STILL')" id="btn-st-STAND STILL" class="p-2.5 rounded-xl text-xs font-black text-center transition st-standstill">
-            STAND STILL
-          </button>
+          <button onclick="setModalStatus('DISPONIBLE')" id="btn-st-DISPONIBLE" class="p-2.5 rounded-xl text-xs font-black text-center transition st-disp">DISPONIBLE</button>
+          <button onclick="setModalStatus('DISPONIBLE CON RESTRICCIONES')" id="btn-st-DISPONIBLE CON RESTRICCIONES" class="p-2.5 rounded-xl text-[11px] font-black text-center transition st-restr leading-tight">DISP. RESTRICCIÓN</button>
+          <button onclick="setModalStatus('MANTENIMIENTO')" id="btn-st-MANTENIMIENTO" class="p-2.5 rounded-xl text-xs font-black text-center transition st-mant">MANTENIMIENTO</button>
+          <button onclick="setModalStatus('AVERIA')" id="btn-st-AVERIA" class="p-2.5 rounded-xl text-xs font-black text-center transition st-averia">AVERÍA</button>
+          <button onclick="setModalStatus('DISPONIBLE SON RULLAN')" id="btn-st-DISPONIBLE SON RULLAN" class="p-2.5 rounded-xl text-[11px] font-black text-center transition st-disp-sr">DISP. SON RULLÁN</button>
+          <button onclick="setModalStatus('STAND STILL')" id="btn-st-STAND STILL" class="p-2.5 rounded-xl text-xs font-black text-center transition st-standstill">STAND STILL</button>
         </div>
       </div>
 
-      <!-- Ubicación rápida -->
       <div>
         <label class="block text-[11px] font-black text-slate-300 uppercase mb-1">Situación de Operación:</label>
         <select id="m-unit-situacion" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-xs text-white font-bold focus:border-sky-500">
@@ -330,7 +305,6 @@
         </select>
       </div>
 
-      <!-- Nota táctica -->
       <div>
         <label class="block text-[11px] font-black text-slate-300 uppercase mb-1">Nota Táctica / Trabajo:</label>
         <input type="text" id="m-unit-nota" placeholder="Ej. Tracción M1 anulada / Preventivo IM2..." class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white font-medium focus:border-sky-500">
@@ -342,10 +316,7 @@
     </div>
   </div>
 
-
-  <!-- ========================================================================= -->
-  <!-- MODAL: EDICIÓN RÁPIDA DE CASILLA DE TURNO (M, T, GM, GT, FM, FT, D, V, B) -->
-  <!-- ========================================================================= -->
+  <!-- Modal Casilla Turno -->
   <div id="modal-edit-turno" class="fixed inset-0 bg-black/85 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
     <div class="bg-slate-900 border-2 border-sky-500 w-full max-w-xs rounded-2xl p-4 space-y-3 shadow-2xl">
       <div class="flex items-center justify-between border-b border-slate-800 pb-2">
@@ -374,10 +345,7 @@
     </div>
   </div>
 
-
-  <!-- ========================================================================= -->
-  <!-- MODAL: AJUSTE DE REQUISITOS MÍNIMOS DEL CLIENTE                           -->
-  <!-- ========================================================================= -->
+  <!-- Modal Requisitos Cliente -->
   <div id="modal-reqs" class="fixed inset-0 bg-black/85 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
     <div class="bg-slate-900 border-2 border-sky-500 w-full max-w-sm rounded-2xl p-4 space-y-3 shadow-2xl">
       <div class="flex items-center justify-between border-b border-slate-800 pb-2">
@@ -418,8 +386,7 @@
     </div>
   </div>
 
-
-  <!-- ==================== NAVEGACIÓN INFERIOR FIJA ==================== -->
+  <!-- Navegación inferior fija -->
   <nav class="pb-safe bg-[#001730] border-t border-sky-600/50 grid grid-cols-3 shrink-0 shadow-2xl">
     <button onclick="switchTab('disponibilidad')" id="nav-btn-disponibilidad" class="py-2.5 flex flex-col items-center gap-0.5 text-sky-400 font-black transition">
       <i class="ph-bold ph-table text-xl"></i>
@@ -435,21 +402,42 @@
     </button>
   </nav>
 
-
   <!-- ========================================================================= -->
-  <!-- JAVASCRIPT: LÓGICA COMPLETA DE LA APLICACIÓN                              -->
+  <!-- JAVASCRIPT: LÓGICA CON FIREBASE REALTIME DATABASE                         -->
   <!-- ========================================================================= -->
   <script>
-    // 1. CENSO OFICIAL: 30 UNIDADES ELÉCTRICAS SFM
+    // --------------------------------------------------------------------------
+    // 1. CONFIGURACIÓN DE FIREBASE (PEGA AQUÍ TUS CREDENCIALES DEL PASO 1)
+    // --------------------------------------------------------------------------
+    var firebaseConfig = {
+      apiKey: "AIzaSyB252NMMTlOLwdsx6CIR7y-ql-OFTvb4Vw",
+      authDomain: "app-tallerlive.firebaseapp.com",
+      databaseURL: "https://app-tallerlive-default-rtdb.europe-west1.firebasedatabase.app",
+      projectId: "app-tallerlive",
+      storageBucket: "app-tallerlive.firebasestorage.app",
+      messagingSenderId: "235971938722",
+      appId: "1:235971938722:web:967d485a3ca990b1c70afb"
+    };
+
+    var db = null;
+    var isFirebaseOnline = false;
+
+    try {
+      if (firebaseConfig.apiKey !== "PEGA_AQUI_TU_API_KEY") {
+        firebase.initializeApp(firebaseConfig);
+        db = firebase.database();
+      }
+    } catch(err) {
+      console.warn("Firebase no inicializado:", err);
+    }
+
+    // 2. CENSO OFICIAL SFM (30 UNIDADES ELÉCTRICAS)
     var SFM_FLOTA_DATA = [
-      // 1. Serie 8100x3 (5 U: 8101 a 8105)
       { id: "8101", serie: "8100x3", comp: "8101-8301-8102" },
       { id: "8102", serie: "8100x3", comp: "8103-8302-8104" },
       { id: "8103", serie: "8100x3", comp: "8105-8303-8106" },
       { id: "8104", serie: "8100x3", comp: "8107-8304-8108" },
       { id: "8105", serie: "8100x3", comp: "8109-8305-8110" },
-
-      // 2. Serie 8100x4 (8 U: 8106 a 8113)
       { id: "8106", serie: "8100x4", comp: "8111-8306-8307-8112" },
       { id: "8107", serie: "8100x4", comp: "8113-8308-8309-8114" },
       { id: "8108", serie: "8100x4", comp: "8115-8310-8311-8116" },
@@ -458,23 +446,17 @@
       { id: "8111", serie: "8100x4", comp: "8121-8316-8317-8122" },
       { id: "8112", serie: "8100x4", comp: "8123-8318-8319-8124" },
       { id: "8113", serie: "8100x4", comp: "8125-8320-8321-8126" },
-
-      // 3. Serie 7100 (6 U: 7101 a 7106)
       { id: "7101", serie: "7100", comp: "7101-7102" },
       { id: "7102", serie: "7100", comp: "7103-7104" },
       { id: "7103", serie: "7100", comp: "7105-7106" },
       { id: "7104", serie: "7100", comp: "7107-7108" },
       { id: "7105", serie: "7100", comp: "7109-7110" },
       { id: "7106", serie: "7100", comp: "7111-7112" },
-
-      // 4. Serie 1100 (5 U: 1101 a 1105)
       { id: "1101", serie: "1100", comp: "1101-1201-1202-1102" },
       { id: "1102", serie: "1100", comp: "1103-1203-1204-1104" },
       { id: "1103", serie: "1100", comp: "1105-1205-1206-1106" },
       { id: "1104", serie: "1100", comp: "1107-1207-1208-1108" },
       { id: "1105", serie: "1100", comp: "1109-1209-1210-1110" },
-
-      // 5. Serie 9100 (6 U: 9101 a 9106)
       { id: "9101", serie: "9100", comp: "9101-9301-9102" },
       { id: "9102", serie: "9100", comp: "9103-9302-9104" },
       { id: "9103", serie: "9100", comp: "9105-9303-9106" },
@@ -483,7 +465,6 @@
       { id: "9106", serie: "9100", comp: "9111-9306-9112" }
     ];
 
-    // ORDEN ESTRICTO DE SERIES: 8100x3, 8100x4, 7100, 1100, 9100
     var ORDERED_SERIES = [
       { code: "8100x3", name: "S/8100x3 SFM (3 Coches)", total: 5 },
       { code: "8100x4", name: "S/8100x4 SFM (4 Coches)", total: 8 },
@@ -492,18 +473,41 @@
       { code: "9100",   name: "S/9100 SFM (Tren-Tram)", total: 6 }
     ];
 
-    var DEFAULT_REQS = { "8100x3": 4, "8100x4": 6, "7100": 4, "1100": 4, "9100": 4 };
+    var DEFAULT_REQS = { "8100x3": 3, "8100x4": 7, "7100": 4, "1100": 2, "9100": 4 };
     
     var DEFAULT_VIAS = [
+      { id: "V10", name: "VÍA 10 (FOSO 1)", secc: "TIERRA", unit: "8104", trabajo: "Preventivo IM2" },
+      { id: "V27", name: "VÍA 27 (FOSO 2)", secc: "NO_APLICA", unit: "8117-18", trabajo: "IM2 + soporte cilindro freno" },
       { id: "V23", name: "VÍA 23 (FOSO 3)", secc: "TENSION", unit: "7102", trabajo: "Reparación Tracción N2" },
       { id: "V25", name: "VÍA 25 (FOSO 4)", secc: "TENSION", unit: null, trabajo: "" },
-	    { id: "V10", name: "VÍA 10 (FOSO 1)", secc: "TIERRA", unit: "8104", trabajo: "Preventivo IM2" },
-      { id: "V27", name: "VÍA 27 (FOSO 2)", secc: "NO_APLICA", unit: "8117-18", trabajo: "IM2 + soporte cilindro freno" },
       { id: "VTORNO", name: "VÍA TORNO FOSO", secc: "NO_APLICA", unit: "8112", trabajo: "Reperfilado Ejes 1-4" },
       { id: "VLAV", name: "VÍA LAVADO / INSP.", secc: "TENSION", unit: null, trabajo: "" }
     ];
 
-    // ESTADO EN MEMORIA
+    var turnosDays = [
+      { date: "30/3", dow: "L", festivo: false, finSemana: false },
+      { date: "31/3", dow: "M", festivo: false, finSemana: false },
+      { date: "1/4",  dow: "X", festivo: false, finSemana: false },
+      { date: "2/4",  dow: "J", festivo: false, finSemana: false },
+      { date: "3/4",  dow: "V", festivo: false, finSemana: false },
+      { date: "4/4",  dow: "S", festivo: false, finSemana: true },
+      { date: "5/4",  dow: "D", festivo: false, finSemana: true },
+      { date: "6/4",  dow: "L", festivo: false, finSemana: false },
+      { date: "7/4",  dow: "M", festivo: false, finSemana: false },
+      { date: "8/4",  dow: "X", festivo: false, finSemana: false },
+      { date: "9/4",  dow: "J", festivo: true,  finSemana: false },
+      { date: "10/4", dow: "V", festivo: true,  finSemana: false },
+      { date: "11/4", dow: "S", festivo: false, finSemana: true },
+      { date: "12/4", dow: "D", festivo: false, finSemana: true },
+      { date: "13/4", dow: "L", festivo: true,  finSemana: false },
+      { date: "14/4", dow: "M", festivo: false, finSemana: false },
+      { date: "15/4", dow: "X", festivo: false, finSemana: false },
+      { date: "16/4", dow: "J", festivo: false, finSemana: false },
+      { date: "17/4", dow: "V", festivo: false, finSemana: false },
+      { date: "18/4", dow: "S", festivo: false, finSemana: true },
+      { date: "19/4", dow: "D", festivo: false, finSemana: true }
+    ];
+
     var appFleet = {};
     var appVias = [];
     var appReqs = {};
@@ -511,79 +515,119 @@
     var expandedSeries = { "8100x3": true, "8100x4": true, "7100": true, "1100": true, "9100": true };
     var currentTurnoFilter = 'TODOS';
     var currentWeekOffset = 0;
-    var activeHighlightedDay = null; // Día actual a resaltar
+    var activeHighlightedDay = "1/4";
 
+    // INICIALIZACIÓN
     window.addEventListener('DOMContentLoaded', function() {
-      loadAllStorage();
+      // 1. Cargar caché local primero para renderizado inmediato
+      loadLocalCache();
       renderDisponibilidad();
       renderVias();
       renderTurnos();
+
+      // 2. Conectar a Firebase para tiempo real multidispositivo
+      initFirebaseSync();
     });
 
-    function loadAllStorage() {
-      var rSaved = localStorage.getItem('sfm_live_reqs_v4');
-      appReqs = rSaved ? JSON.parse(rSaved) : DEFAULT_REQS;
+    function loadLocalCache() {
+      var r = localStorage.getItem('sfm_live_reqs_fb');
+      appReqs = r ? JSON.parse(r) : DEFAULT_REQS;
 
-      var vSaved = localStorage.getItem('sfm_live_vias_v4');
-      appVias = vSaved ? JSON.parse(vSaved) : DEFAULT_VIAS;
+      var v = localStorage.getItem('sfm_live_vias_fb');
+      appVias = v ? JSON.parse(v) : DEFAULT_VIAS;
 
-      var fSaved = localStorage.getItem('sfm_live_fleet_v4');
-      if (fSaved) {
-        appFleet = JSON.parse(fSaved);
+      var f = localStorage.getItem('sfm_live_fleet_fb');
+      if (f) {
+        appFleet = JSON.parse(f);
       } else {
         SFM_FLOTA_DATA.forEach(function(u) {
           appFleet[u.id] = { estado: 'DISPONIBLE', situacion: 'En Circulación (Línea)', nota: '' };
         });
-        // Estados iniciales representativos
-        appFleet['8101'].estado = 'DISPONIBLE';
-        appFleet['8101'].situacion = 'En Taller / Foso';
-        
-        appFleet['8102'].estado = 'AVERIA';
-        appFleet['8102'].situacion = 'En Circulación (Línea)';
-
-        appFleet['8103'].estado = 'DISPONIBLE CON RESTRICCIONES';
-        appFleet['8103'].situacion = 'En Circulación (Línea)';
-
-        appFleet['8104'].estado = 'DISPONIBLE CON RESTRICCIONES';
-        appFleet['8104'].situacion = 'En Taller / Foso';
-        appFleet['8104'].nota = 'Tracción M1 anulada';
-
-        appFleet['8105'].estado = 'AVERIA';
-        appFleet['8105'].situacion = 'En Circulación (Línea)';
-        appFleet['8105'].nota = 'Convertidor estático SIV';
-
-        appFleet['8108'].estado = 'DISPONIBLE SON RULLAN';
-        appFleet['8112'].estado = 'STAND STILL';
-        appFleet['8112'].nota = 'Reductor provisional';
-        appFleet['7102'].estado = 'MANTENIMIENTO';
-        appFleet['7105'].estado = 'MANTENIMIENTO';
-        ['9101','9102','9103','9104','9105','9106'].forEach(function(id){ appFleet[id].estado = 'NO MANTENIDA'; });
       }
 
-      var tSaved = localStorage.getItem('sfm_live_turnos_v4');
-      if (tSaved) {
-        appTurnosCalendar = JSON.parse(tSaved);
+      var t = localStorage.getItem('sfm_live_turnos_fb');
+      if (t) {
+        appTurnosCalendar = JSON.parse(t);
       } else {
         initDefaultTurnos();
       }
 
-      // Determinar día actual a resaltar
       var hoy = new Date();
       var hoyStr = hoy.getDate() + '/' + (hoy.getMonth() + 1);
-      // Si la fecha existe en el calendario, fijarla; de lo contrario por defecto 1/4 (abril)
-      var existe = turnosDays.some(function(d){ return d.date === hoyStr; });
-      activeHighlightedDay = existe ? hoyStr : "1/4";
+      if (turnosDays.some(function(d){ return d.date === hoyStr; })) activeHighlightedDay = hoyStr;
     }
 
-    function saveAllStorage() {
-      localStorage.setItem('sfm_live_reqs_v4', JSON.stringify(appReqs));
-      localStorage.setItem('sfm_live_vias_v4', JSON.stringify(appVias));
-      localStorage.setItem('sfm_live_fleet_v4', JSON.stringify(appFleet));
-      localStorage.setItem('sfm_live_turnos_v4', JSON.stringify(appTurnosCalendar));
+    function initFirebaseSync() {
+      var dot = document.getElementById('firebase-dot');
+      var statusTxt = document.getElementById('firebase-status-text');
+
+      if (!db) {
+        dot.className = "w-1.5 h-1.5 rounded-full bg-amber-400";
+        statusTxt.textContent = "Local (Sin Firebase)";
+        return;
+      }
+
+      // Conexión activa en tiempo real (listener .on('value'))
+      var dataRef = db.ref('sfm_taller_live');
+
+      // Escuchar cambios de cualquier dispositivo en milisegundos
+      dataRef.on('value', function(snapshot) {
+        var remoteData = snapshot.val();
+        dot.className = "w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse";
+        statusTxt.textContent = "En Vivo (Firebase)";
+        isFirebaseOnline = true;
+
+        if (remoteData) {
+          if (remoteData.fleet) appFleet = remoteData.fleet;
+          if (remoteData.vias) appVias = remoteData.vias;
+          if (remoteData.reqs) appReqs = remoteData.reqs;
+          if (remoteData.turnos) appTurnosCalendar = remoteData.turnos;
+
+          // Guardar copia local
+          localStorage.setItem('sfm_live_fleet_fb', JSON.stringify(appFleet));
+          localStorage.setItem('sfm_live_vias_fb', JSON.stringify(appVias));
+          localStorage.setItem('sfm_live_reqs_fb', JSON.stringify(appReqs));
+          localStorage.setItem('sfm_live_turnos_fb', JSON.stringify(appTurnosCalendar));
+
+          renderDisponibilidad();
+          renderVias();
+          renderTurnos();
+        } else {
+          // Primera vez: subir estado inicial a Firebase
+          pushAllToFirebase();
+        }
+      }, function(error) {
+        console.error("Error Firebase:", error);
+        dot.className = "w-1.5 h-1.5 rounded-full bg-rose-500";
+        statusTxt.textContent = "Error Conexión";
+      });
+    }
+
+    // Guarda localmente y sincroniza en Firebase al instante
+    function syncState() {
+      localStorage.setItem('sfm_live_fleet_fb', JSON.stringify(appFleet));
+      localStorage.setItem('sfm_live_vias_fb', JSON.stringify(appVias));
+      localStorage.setItem('sfm_live_reqs_fb', JSON.stringify(appReqs));
+      localStorage.setItem('sfm_live_turnos_fb', JSON.stringify(appTurnosCalendar));
+
+      if (db && isFirebaseOnline) {
+        pushAllToFirebase();
+      }
+    }
+
+    function pushAllToFirebase() {
+      if (!db) return;
+      db.ref('sfm_taller_live').set({
+        fleet: appFleet,
+        vias: appVias,
+        reqs: appReqs,
+        turnos: appTurnosCalendar,
+        updatedAt: firebase.database.ServerValue.TIMESTAMP
+      });
     }
 
     // =========================================================================
-    // 1. PESTAÑA DISPONIBILIDAD (BLOQUE FIJO 140x52px, NOTA EN LÍNEA INFERIOR)
+    // RENDER: DISPONIBILIDAD
     // =========================================================================
     function renderDisponibilidad() {
       renderSummaryCards();
@@ -596,8 +640,8 @@
 
       var totalAptas = 0;
       var totalReq = 0;
-
       var stats = {};
+
       ORDERED_SERIES.forEach(function(s) {
         var units = SFM_FLOTA_DATA.filter(function(x){ return x.serie === s.code; });
         var aptas = units.filter(function(x) {
@@ -606,7 +650,7 @@
         }).length;
         var r = parseInt(appReqs[s.code] || 0);
 
-        stats[s.code] = { aptas: aptas, req: r, total: units.length };
+        stats[s.code] = { aptas: aptas, req: r };
         totalAptas += aptas;
         totalReq += r;
       });
@@ -619,7 +663,7 @@
       bar.style.width = pct + "%";
       bar.className = (totalAptas >= totalReq) ? 'bg-emerald-400 h-full transition-all duration-500 shadow-sm' : 'bg-rose-500 h-full transition-all duration-500 shadow-sm';
 
-      // Tarjeta TOTAL (Al tocar abre directamente configuración de mínimos)
+      // Tarjeta TOTAL
       var cardTotal = document.createElement('div');
       var totalOk = totalAptas >= totalReq;
       cardTotal.className = `p-1.5 rounded-xl border ${totalOk ? 'bg-emerald-950/40 border-emerald-600/70' : 'bg-rose-950/40 border-rose-600/70'} flex flex-col items-center justify-center cursor-pointer active:scale-95 transition`;
@@ -631,7 +675,7 @@
       `;
       grid.appendChild(cardTotal);
 
-      // Tarjetas por serie (Al tocar abren configuración de mínimos)
+      // Tarjetas por serie
       ORDERED_SERIES.forEach(function(s) {
         var st = stats[s.code];
         var ok = st.aptas >= st.req;
@@ -662,9 +706,7 @@
 
         var block = document.createElement('div');
         block.className = 'bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-lg transition-all duration-300';
-        block.id = 'series-block-' + s.code;
 
-        // Cabecera interactiva
         var header = `
           <div onclick="toggleAccordion('${s.code}')" class="bg-gradient-to-r from-[#001730] to-[#002654] p-3 flex items-center justify-between cursor-pointer border-b border-sky-600/40 select-none">
             <div class="flex items-center gap-2">
@@ -683,7 +725,6 @@
           </div>
         `;
 
-        // Filas: Número de unidad grande + Nota en línea inferior + Bloque fijo 142x52px
         var rowsHtml = '';
         if (isExpanded) {
           rowsHtml = units.map(function(u) {
@@ -692,27 +733,21 @@
 
             return `
               <div onclick="openUnitModal('${u.id}')" class="p-3 flex items-center justify-between border-b border-slate-800/80 last:border-b-0 hover:bg-slate-850/50 cursor-pointer active:scale-[0.99] transition bg-slate-950/60">
-                <!-- Columna Izquierda: Unidad, composición, ubicación y nota táctica en línea inferior -->
                 <div class="space-y-1 flex-1 pr-2.5 overflow-hidden">
-                  <!-- Línea 1: Número de unidad gigante y composición -->
                   <div class="flex items-baseline gap-2">
                     <span class="text-3xl font-black text-white font-mono tracking-tight leading-none">${u.id}</span>
                     <span class="text-xs font-mono font-bold text-slate-400">${u.comp}</span>
                   </div>
-                  <!-- Línea 2: Situación de operación -->
                   <div class="text-[11px] text-slate-400 flex items-center gap-1 font-medium">
                     <i class="ph-bold ph-map-pin text-sky-400 text-xs shrink-0"></i>
                     <span class="truncate">${st.situacion || 'En Circulación (Línea)'}</span>
                   </div>
-                  <!-- Línea 3: Nota táctica en línea inferior independiente -->
                   ${st.nota ? `
                   <div class="text-[11px] text-amber-300 font-semibold flex items-center gap-1 pt-0.5 truncate">
                     <i class="ph-bold ph-warning text-amber-400 shrink-0"></i>
                     <span class="truncate">${st.nota}</span>
                   </div>` : ''}
                 </div>
-
-                <!-- Columna Derecha: Bloque de Estado FIJO del mismo tamaño (142x52px) -->
                 <div class="status-pill-fixed ${badgeClass}">
                   <span class="text-[11px] font-black tracking-wide leading-tight text-center uppercase">${st.estado}</span>
                 </div>
@@ -747,7 +782,7 @@
     }
 
     // =========================================================================
-    // 2. PESTAÑA VÍAS Y FOSO (SIN 'UT' NI '[OCUPADA]', DIRECTAMENTE EL NÚMERO)
+    // RENDER: VÍAS Y FOSO
     // =========================================================================
     function renderVias() {
       var cont = document.getElementById('vias-cards-list');
@@ -758,7 +793,6 @@
         var ocupada = !!v.unit;
         card.className = `bg-slate-900 border-2 rounded-2xl p-3.5 space-y-2.5 shadow-xl transition ${ocupada ? 'border-sky-500/70' : 'border-slate-800'}`;
 
-        // Seccionador
         var seccHtml = '';
         if (v.secc === 'TENSION') {
           seccHtml = `
@@ -776,12 +810,9 @@
           seccHtml = `<span class="text-[11px] text-slate-500 font-bold px-2 py-1">Sin Catenaria</span>`;
         }
 
-        // Tren y Trabajo: SIN "UT" NI "[OCUPADA]"
         var ocupHtml = ocupada ? `
           <div class="space-y-1">
-            <div class="text-3xl sm:text-4xl font-black text-white font-mono tracking-tight leading-none">
-              ${v.unit}
-            </div>
+            <div class="text-3xl sm:text-4xl font-black text-white font-mono tracking-tight leading-none">${v.unit}</div>
             <div class="text-xs font-bold text-amber-300 flex items-center gap-1.5">
               <i class="ph-bold ph-wrench text-sky-400"></i>
               <span>${v.trabajo || 'Sin trabajo especificado'}</span>
@@ -815,7 +846,7 @@
     function toggleViaSeccionador(idx) {
       if (appVias[idx].secc === 'TENSION') appVias[idx].secc = 'TIERRA';
       else if (appVias[idx].secc === 'TIERRA') appVias[idx].secc = 'TENSION';
-      saveAllStorage();
+      syncState();
       renderVias();
     }
 
@@ -836,41 +867,16 @@
         } else {
           v.trabajo = "";
         }
-        saveAllStorage();
+        syncState();
         renderVias();
         renderDisponibilidad();
       }
     }
 
     // =========================================================================
-    // 3. PESTAÑA TURNOS (M, T, GM, GT, FM, FT, D, V, B - DÍA ACTUAL RESALTADO)
+    // RENDER: TURNOS
     // =========================================================================
-    var turnosDays = [
-      { date: "30/3", dow: "L", festivo: false, finSemana: false },
-      { date: "31/3", dow: "M", festivo: false, finSemana: false },
-      { date: "1/4",  dow: "X", festivo: false, finSemana: false },
-      { date: "2/4",  dow: "J", festivo: false, finSemana: false },
-      { date: "3/4",  dow: "V", festivo: false, finSemana: false },
-      { date: "4/4",  dow: "S", festivo: false, finSemana: true },
-      { date: "5/4",  dow: "D", festivo: false, finSemana: true },
-      { date: "6/4",  dow: "L", festivo: false, finSemana: false },
-      { date: "7/4",  dow: "M", festivo: false, finSemana: false },
-      { date: "8/4",  dow: "X", festivo: false, finSemana: false },
-      { date: "9/4",  dow: "J", festivo: true,  finSemana: false },
-      { date: "10/4", dow: "V", festivo: true,  finSemana: false },
-      { date: "11/4", dow: "S", festivo: false, finSemana: true },
-      { date: "12/4", dow: "D", festivo: false, finSemana: true },
-      { date: "13/4", dow: "L", festivo: true,  finSemana: false },
-      { date: "14/4", dow: "M", festivo: false, finSemana: false },
-      { date: "15/4", dow: "X", festivo: false, finSemana: false },
-      { date: "16/4", dow: "J", festivo: false, finSemana: false },
-      { date: "17/4", dow: "V", festivo: false, finSemana: false },
-      { date: "18/4", dow: "S", festivo: false, finSemana: true },
-      { date: "19/4", dow: "D", festivo: false, finSemana: true }
-    ];
-
     function initDefaultTurnos() {
-      // Sin turno 'N' (sustituidos por GM/GT/M/T)
       appTurnosCalendar = [
         { apellidos: "SEBASTIAN", nombre: "BRUNO", puesto: "ALMACEN", turnos: { "30/3":"M","31/3":"M","1/4":"M","2/4":"M","3/4":"M","4/4":"D","5/4":"D","6/4":"M","7/4":"M","8/4":"M","9/4":"FM","10/4":"FM","11/4":"D","12/4":"D","13/4":"FM","14/4":"M","15/4":"M","16/4":"M","17/4":"M","18/4":"D","19/4":"D" } },
         { apellidos: "MEDINA", nombre: "JORGE", puesto: "ALMACEN", turnos: { "30/3":"T","31/3":"T","1/4":"T","2/4":"T","3/4":"T","4/4":"D","5/4":"D","6/4":"T","7/4":"T","8/4":"T","9/4":"FT","10/4":"FT","11/4":"D","12/4":"D","13/4":"FT","14/4":"T","15/4":"T","16/4":"T","17/4":"T","18/4":"D","19/4":"D" } },
@@ -886,20 +892,14 @@
         { apellidos: "ROIG", nombre: "MATEO", puesto: "T.PREVENTIVO", turnos: { "30/3":"T","31/3":"T","1/4":"T","2/4":"D","3/4":"D","4/4":"T","5/4":"T","6/4":"V","7/4":"V","8/4":"V","9/4":"FT","10/4":"FT","11/4":"D","12/4":"D","13/4":"FT","14/4":"V","15/4":"V","16/4":"V","17/4":"V","18/4":"D","19/4":"D" } },
         { apellidos: "ALVARADO", nombre: "RENE", puesto: "T.PREVENTIVO", turnos: { "30/3":"M","31/3":"M","1/4":"M","2/4":"M","3/4":"M","4/4":"D","5/4":"D","6/4":"M","7/4":"M","8/4":"M","9/4":"FM","10/4":"FM","11/4":"D","12/4":"D","13/4":"FM","14/4":"M","15/4":"M","16/4":"M","17/4":"M","18/4":"D","19/4":"D" } }
       ];
-      saveAllStorage();
     }
 
-    // FILTRO DE TURNOS: SOLO TODOS, M, T
     function setTurnoFilter(flt) {
       currentTurnoFilter = flt;
       ['TODOS', 'M', 'T'].forEach(function(b) {
         var el = document.getElementById('btn-flt-' + b);
         if (el) {
-          if (b === flt) {
-            el.className = 'px-3 py-1 rounded-lg bg-sky-600 text-white shadow';
-          } else {
-            el.className = 'px-3 py-1 rounded-lg bg-slate-800 text-slate-400 border border-slate-700';
-          }
+          el.className = (b === flt) ? 'px-3 py-1 rounded-lg bg-sky-600 text-white shadow' : 'px-3 py-1 rounded-lg bg-slate-800 text-slate-400 border border-slate-700';
         }
       });
       renderTurnos();
@@ -935,7 +935,6 @@
 
       document.getElementById('turnos-week-title').textContent = visibleDays[0].date + " - " + visibleDays[visibleDays.length - 1].date;
 
-      // Cabecera con columna del día actual resaltada
       var headHtml = `
         <tr>
           <th class="py-2 px-2.5 sticky left-0 bg-[#001730] z-20 border-r border-slate-800 w-36">Técnico / Área</th>
@@ -956,7 +955,6 @@
       headHtml += `</tr>`;
       thead.innerHTML = headHtml;
 
-      // Filtrado: Todos, Mañana (M) o Tarde (T)
       var filtrados = appTurnosCalendar.filter(function(p) {
         if (currentTurnoFilter === 'TODOS') return true;
         return visibleDays.some(function(d) {
@@ -970,7 +968,6 @@
         return;
       }
 
-      // Filas con la columna del día actual resaltada verticalmente
       filtrados.forEach(function(p) {
         var tr = document.createElement('tr');
         tr.className = 'hover:bg-slate-850/50 transition';
@@ -1015,7 +1012,6 @@
       return 'cell-d';
     }
 
-    // Modal de edición de casilla de turno
     var editingTurnoTarget = { nombre: '', date: '' };
 
     function openEditTurnoModal(nombre, date) {
@@ -1033,7 +1029,7 @@
       var p = appTurnosCalendar.find(function(x){ return (x.apellidos + ' ' + x.nombre) === editingTurnoTarget.nombre; });
       if (p) {
         p.turnos[editingTurnoTarget.date] = code;
-        saveAllStorage();
+        syncState();
         renderTurnos();
       }
       closeEditTurnoModal();
@@ -1051,10 +1047,7 @@
           var ws = wb.Sheets[wb.SheetNames[0]];
           var json = XLSX.utils.sheet_to_json(ws, { header: 1 });
 
-          if (!json || json.length < 2) {
-            alert("El archivo no contiene suficientes datos.");
-            return;
-          }
+          if (!json || json.length < 2) return alert("El archivo no contiene suficientes datos.");
 
           var headerRow = json[0];
           var dateCols = [];
@@ -1074,7 +1067,6 @@
             var turnosObj = {};
             dateCols.forEach(function(dc) {
               var val = row[dc.col] ? String(row[dc.col]).trim().toUpperCase() : 'D';
-              // Convertir 'N' en 'GM' si viniese en plantillas antiguas
               if (val === 'N') val = 'GM';
               turnosObj[dc.date] = val;
             });
@@ -1084,7 +1076,7 @@
 
           if (parsedList.length > 0) {
             appTurnosCalendar = parsedList;
-            saveAllStorage();
+            syncState();
             renderTurnos();
             alert("¡Cargados con éxito " + parsedList.length + " técnicos!");
           }
@@ -1097,11 +1089,12 @@
 
     function loadSampleTurnosReal() {
       initDefaultTurnos();
+      syncState();
       renderTurnos();
     }
 
     // =========================================================================
-    // MODAL DE UNIDAD (CAMBIO DE ESTADO)
+    // MODAL DE UNIDAD
     // =========================================================================
     var activeModalUnitId = null;
     var modalTempStatus = 'DISPONIBLE';
@@ -1155,7 +1148,7 @@
         nota: not
       };
 
-      saveAllStorage();
+      syncState();
       closeUnitModal();
       renderDisponibilidad();
     }
@@ -1164,10 +1157,10 @@
     // MODAL REQUISITOS CLIENTE
     // =========================================================================
     function openRequirementsModal() {
-      document.getElementById('req-8100x3').value = appReqs["8100x3"] || 4;
-      document.getElementById('req-8100x4').value = appReqs["8100x4"] || 6;
+      document.getElementById('req-8100x3').value = appReqs["8100x3"] || 3;
+      document.getElementById('req-8100x4').value = appReqs["8100x4"] || 7;
       document.getElementById('req-7100').value = appReqs["7100"] || 4;
-      document.getElementById('req-1100').value = appReqs["1100"] || 4;
+      document.getElementById('req-1100').value = appReqs["1100"] || 2;
       document.getElementById('req-9100').value = appReqs["9100"] || 4;
       document.getElementById('modal-reqs').classList.remove('hidden');
     }
@@ -1182,12 +1175,11 @@
       appReqs["7100"] = parseInt(document.getElementById('req-7100').value) || 0;
       appReqs["1100"] = parseInt(document.getElementById('req-1100').value) || 0;
       appReqs["9100"] = parseInt(document.getElementById('req-9100').value) || 0;
-      saveAllStorage();
+      syncState();
       closeRequirementsModal();
       renderDisponibilidad();
     }
 
-    // CONMUTACIÓN DE PESTAÑAS PRINCIPALES
     function switchTab(tId) {
       ['disponibilidad', 'vias', 'turnos'].forEach(function(t) {
         var view = document.getElementById('view-' + t);
