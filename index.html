@@ -605,15 +605,30 @@
 
     // Guarda localmente y sincroniza en Firebase al instante
     function syncState() {
-      localStorage.setItem('sfm_live_fleet_fb', JSON.stringify(appFleet));
-      localStorage.setItem('sfm_live_vias_fb', JSON.stringify(appVias));
-      localStorage.setItem('sfm_live_reqs_fb', JSON.stringify(appReqs));
-      localStorage.setItem('sfm_live_turnos_fb', JSON.stringify(appTurnosCalendar));
+     // 1. Guardar copia local de respaldo
+     localStorage.setItem('sfm_live_fleet_fb', JSON.stringify(appFleet));
+     localStorage.setItem('sfm_live_vias_fb', JSON.stringify(appVias));
+     localStorage.setItem('sfm_live_reqs_fb', JSON.stringify(appReqs));
+     localStorage.setItem('sfm_live_turnos_fb', JSON.stringify(appTurnosCalendar));
 
-      if (db && isFirebaseOnline) {
-        pushAllToFirebase();
-      }
-    }
+    // 2. Redibujar inmediatamente la pantalla activa (sin esperar a recargar)
+    renderDisponibilidad();
+    renderVias();
+    renderTurnos();
+
+    // 3. Enviar a Firebase en segundo plano para los demás dispositivos
+   if (db && isFirebaseOnline) {
+    db.ref('sfm_taller_live').update({
+      fleet: appFleet,
+      vias: appVias,
+      reqs: appReqs,
+      turnos: appTurnosCalendar,
+      updatedAt: Date.now()
+    }).catch(function(err) {
+      console.error("Error enviando a Firebase:", err);
+    });
+  }
+}
 
     function pushAllToFirebase() {
       if (!db) return;
@@ -1028,11 +1043,10 @@
     function applyTurnoCode(code) {
       var p = appTurnosCalendar.find(function(x){ return (x.apellidos + ' ' + x.nombre) === editingTurnoTarget.nombre; });
       if (p) {
-        p.turnos[editingTurnoTarget.date] = code;
-        syncState();
-        renderTurnos();
+       p.turnos[editingTurnoTarget.date] = code;
+       closeEditTurnoModal();
+       syncState(); // Guarda, sincroniza y redibuja al instante
       }
-      closeEditTurnoModal();
     }
 
     function handleTurnosUpload(event) {
@@ -1138,20 +1152,19 @@
     }
 
     function saveUnitModalChanges() {
-      if (!activeModalUnitId) return;
-      var sit = document.getElementById('m-unit-situacion').value;
-      var not = document.getElementById('m-unit-nota').value.trim();
+     if (!activeModalUnitId) return;
+     var sit = document.getElementById('m-unit-situacion').value;
+     var not = document.getElementById('m-unit-nota').value.trim();
 
-      appFleet[activeModalUnitId] = {
-        estado: modalTempStatus,
-        situacion: sit,
-        nota: not
-      };
+    appFleet[activeModalUnitId] = {
+      estado: modalTempStatus,
+      situacion: sit,
+      nota: not
+    };
 
-      syncState();
-      closeUnitModal();
-      renderDisponibilidad();
-    }
+  closeUnitModal();
+  syncState(); // Guarda, sincroniza y redibuja al instante
+}
 
     // =========================================================================
     // MODAL REQUISITOS CLIENTE
