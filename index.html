@@ -1071,10 +1071,64 @@
 
           var headerRow = json[0];
           var dateCols = [];
-          for (var c = 3; c < headerRow.length; c++) {
-            if (headerRow[c]) dateCols.push({ col: c, date: String(headerRow[c]).trim() });
+          var dows = ['D', 'L', 'M', 'X', 'J', 'V', 'S'];
+          var monthNames = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+          var detectedMonth = 9; // Octubre (base 0)
+          var detectedYear = 2026;
+
+          // Función robusta para descifrar fechas de Excel (números de serie, fechas o texto)
+          function parseExcelHeaderDate(raw) {
+            if (raw === null || raw === undefined) return null;
+            var num = Number(raw);
+            // Si Excel lo guardó como número de serie (ej: 46296 para 1/10/2026)
+            if (!isNaN(num) && num > 30000) {
+              var dt = new Date(Math.round((num - 25569) * 86400 * 1000));
+              return { day: dt.getUTCDate(), month: dt.getUTCMonth() + 1, year: dt.getUTCFullYear() };
+            }
+            // Si viene como Date object
+            if (raw instanceof Date) {
+              return { day: raw.getDate(), month: raw.getMonth() + 1, year: raw.getFullYear() };
+            }
+            // Si viene como texto "1/10", "01/10/2026", "2026-10-01"
+            var s = String(raw).trim();
+            var m = s.match(/^(\d{1,2})[\/\.\-](\d{1,2})(?:[\/\.\-](\d{2,4}))?$/);
+            if (m) {
+              var d = parseInt(m[1], 10);
+              var mo = parseInt(m[2], 10);
+              var y = m[3] ? parseInt(m[3], 10) : 2026;
+              if (y < 100) y += 2000;
+              return { day: d, month: mo, year: y };
+            }
+            return null;
           }
 
+          // Detectar columnas de fechas a partir de la columna D (índice 3)
+          var newTurnosDays = [];
+          for (var c = 3; c < headerRow.length; c++) {
+            var parsed = parseExcelHeaderDate(headerRow[c]);
+            if (parsed) {
+              var dateKey = parsed.day + '/' + parsed.month;
+              dateCols.push({ col: c, dateKey: dateKey });
+
+              var dObj = new Date(parsed.year, parsed.month - 1, parsed.day);
+              var dowIdx = dObj.getDay();
+              detectedMonth = parsed.month - 1;
+              detectedYear = parsed.year;
+
+              newTurnosDays.push({
+                date: dateKey,
+                dow: dows[dowIdx],
+                festivo: (dateKey === '12/10'), // 12 de Octubre Fiesta Nacional
+                finSemana: (dowIdx === 0 || dowIdx === 6)
+              });
+            }
+          }
+
+          if (dateCols.length === 0) {
+            return alert("No se detectaron columnas de fechas válidas en la fila 1.");
+          }
+
+          // Procesar las filas de personal
           var parsedList = [];
           for (var r = 1; r < json.length; r++) {
             var row = json[r];
@@ -1086,40 +1140,33 @@
 
             var turnosObj = {};
             dateCols.forEach(function(dc) {
-              var val = row[dc.col] ? String(row[dc.col]).trim().toUpperCase() : 'D';
+              var val = row[dc.col] !== undefined && row[dc.col] !== null ? String(row[dc.col]).trim().toUpperCase() : 'D';
               if (val === 'N') val = 'GM';
-              turnosObj[dc.date] = val;
+              turnosObj[dc.dateKey] = val;
             });
 
             parsedList.push({ apellidos: ap, nombre: nom, puesto: puesto, turnos: turnosObj });
           }
 
           if (parsedList.length > 0) {
-            // Actualizar dinámicamente turnosDays con las fechas del Excel
-            var dows = ['D', 'L', 'M', 'X', 'J', 'V', 'S'];
-            turnosDays = dateCols.map(function(dc) {
-              var parts = dc.date.split('/');
-              var dNum = parseInt(parts[0], 10);
-              var mNum = parseInt(parts[1], 10) - 1;
-              var dObj = new Date(2026, mNum, dNum);
-              var dowIdx = dObj.getDay();
-              var esFinSemana = (dowIdx === 0 || dowIdx === 6);
-              var esFestivo = (dc.date === '12/10'); // 12 de octubre festivo nacional
-              return {
-                date: dc.date,
-                dow: dows[dowIdx],
-                festivo: esFestivo,
-                finSemana: esFinSemana
-              };
-            });
-
+            // Actualizar el calendario dinámicamente con los días de Octubre
+            turnosDays = newTurnosDays;
             currentWeekOffset = 0;
-            document.getElementById('turnos-active-range').textContent = "Octubre 2026";
-            
+
+            // Actualizar etiqueta del mes
+            var monthLabel = monthNames[detectedMonth] + " " + detectedYear;
+            var labelEl = document.getElementById('turnos-active-range');
+            if (labelEl) labelEl.textContent = monthLabel;
+
+            // Fijar día resaltado
+            var hoy = new Date();
+            var hoyKey = hoy.getDate() + '/' + (hoy.getMonth() + 1);
+            activeHighlightedDay = turnosDays.some(function(d){ return d.date === hoyKey; }) ? hoyKey : turnosDays[0].date;
+
             appTurnosCalendar = parsedList;
             syncState();
             renderTurnos();
-            alert("¡Cuadrante de Octubre cargado con éxito (" + parsedList.length + " técnicos)!");
+            alert("¡Cuadrante de " + monthLabel + " cargado con éxito (" + parsedList.length + " técnicos)!");
           }
         } catch(err) {
           alert("Error al leer Excel: " + err.message);
