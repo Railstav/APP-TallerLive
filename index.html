@@ -1095,10 +1095,31 @@
           }
 
           if (parsedList.length > 0) {
+            // Actualizar dinámicamente turnosDays con las fechas del Excel
+            var dows = ['D', 'L', 'M', 'X', 'J', 'V', 'S'];
+            turnosDays = dateCols.map(function(dc) {
+              var parts = dc.date.split('/');
+              var dNum = parseInt(parts[0], 10);
+              var mNum = parseInt(parts[1], 10) - 1;
+              var dObj = new Date(2026, mNum, dNum);
+              var dowIdx = dObj.getDay();
+              var esFinSemana = (dowIdx === 0 || dowIdx === 6);
+              var esFestivo = (dc.date === '12/10'); // 12 de octubre festivo nacional
+              return {
+                date: dc.date,
+                dow: dows[dowIdx],
+                festivo: esFestivo,
+                finSemana: esFinSemana
+              };
+            });
+
+            currentWeekOffset = 0;
+            document.getElementById('turnos-active-range').textContent = "Octubre 2026";
+            
             appTurnosCalendar = parsedList;
             syncState();
             renderTurnos();
-            alert("¡Cargados con éxito " + parsedList.length + " técnicos!");
+            alert("¡Cuadrante de Octubre cargado con éxito (" + parsedList.length + " técnicos)!");
           }
         } catch(err) {
           alert("Error al leer Excel: " + err.message);
