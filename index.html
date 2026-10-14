@@ -754,6 +754,69 @@
       });
     }
 
+    // Repara automáticamente fechas numéricas de Excel que ya estén guardadas en Firebase o LocalStorage
+    function repararFechasTurnosEnMemoria() {
+      if (typeof normalizarFechaExcel !== 'function') return false;
+      var huboCambios = false;
+      var dows = ['D', 'L', 'M', 'X', 'J', 'V', 'S'];
+      var anioActual = new Date().getFullYear();
+
+      if (Array.isArray(turnosDays)) {
+        turnosDays = turnosDays.map(function(d) {
+          var fechaOriginal = String(d.date || '').trim();
+          var fechaLimpia = normalizarFechaExcel(fechaOriginal);
+          if (fechaLimpia !== fechaOriginal) huboCambios = true;
+
+          var dia = 1, mes = 0;
+          if (fechaLimpia.indexOf('/') !== -1) {
+            var partes = fechaLimpia.split('/');
+            dia = parseInt(partes[0], 10) || 1;
+            mes = (parseInt(partes[1], 10) || 1) - 1;
+          }
+          var fechaObj = new Date(anioActual, mes, dia);
+          var dowIndex = fechaObj.getDay();
+          var dowCalculado = dows[dowIndex] || 'L';
+          var esFinSemana = (dowIndex === 0 || dowIndex === 6);
+
+          if (d.dow !== dowCalculado || d.finSemana !== esFinSemana) {
+            huboCambios = true;
+          }
+
+          return {
+            date: fechaLimpia,
+            dow: dowCalculado,
+            festivo: !!d.festivo,
+            finSemana: esFinSemana
+          };
+        });
+      }
+
+      if (Array.isArray(appTurnosCalendar)) {
+        appTurnosCalendar.forEach(function(p) {
+          if (!p || !p.turnos) return;
+          var nuevosTurnos = {};
+          Object.keys(p.turnos).forEach(function(k) {
+            var kLimpia = normalizarFechaExcel(k);
+            if (kLimpia !== k) huboCambios = true;
+            nuevosTurnos[kLimpia] = p.turnos[k];
+          });
+          p.turnos = nuevosTurnos;
+        });
+      }
+
+      if (activeHighlightedDay) {
+        activeHighlightedDay = normalizarFechaExcel(activeHighlightedDay);
+      }
+
+      var hoy = new Date();
+      var hoyStr = hoy.getDate() + '/' + (hoy.getMonth() + 1);
+      if (Array.isArray(turnosDays) && turnosDays.some(function(d){ return d.date === hoyStr; })) {
+        activeHighlightedDay = hoyStr;
+      }
+
+      return huboCambios;
+    }
+
     function loadLocalCache() {
       var r = localStorage.getItem('sfm_live_reqs_fb');
       appReqs = r ? JSON.parse(r) : DEFAULT_REQS;
@@ -788,9 +851,7 @@
       var planSaved = localStorage.getItem('sfm_live_planif_fb');
       appPlanificacion = planSaved ? JSON.parse(planSaved) : DEFAULT_PLANIFICACION;
 
-      var hoy = new Date();
-      var hoyStr = hoy.getDate() + '/' + (hoy.getMonth() + 1);
-      if (turnosDays.some(function(d){ return d.date === hoyStr; })) activeHighlightedDay = hoyStr;
+      repararFechasTurnosEnMemoria();
     }
 
     function initFirebaseSync() {
@@ -831,6 +892,8 @@
             catch(e) { appPlanificacion = remote.planificacion; }
           }
 
+          var reparado = repararFechasTurnosEnMemoria();
+
           localStorage.setItem('sfm_live_fleet_fb', JSON.stringify(appFleet));
           localStorage.setItem('sfm_live_vias_fb', JSON.stringify(appVias));
           localStorage.setItem('sfm_live_reqs_fb', JSON.stringify(appReqs));
@@ -838,6 +901,13 @@
           localStorage.setItem('sfm_live_turnos_days_fb', JSON.stringify(turnosDays));
           localStorage.setItem('sfm_live_pendientes_fb', JSON.stringify(appPendientes));
           localStorage.setItem('sfm_live_planif_fb', JSON.stringify(appPlanificacion));
+
+          if (reparado) {
+            db.ref('sfm_taller_live').update({
+              turnos: appTurnosCalendar,
+              turnosDays: turnosDays
+            });
+          }
 
           renderActiveTab();
         } else {
