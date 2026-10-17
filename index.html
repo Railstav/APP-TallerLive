@@ -921,7 +921,7 @@
     }
 
     function syncState() {
-      // 1. Respaldo local
+      // 1. Respaldo local inmediato
       localStorage.setItem('sfm_live_fleet_fb', JSON.stringify(appFleet));
       localStorage.setItem('sfm_live_vias_fb', JSON.stringify(appVias));
       localStorage.setItem('sfm_live_reqs_fb', JSON.stringify(appReqs));
@@ -930,22 +930,41 @@
       localStorage.setItem('sfm_live_pendientes_fb', JSON.stringify(appPendientes));
       localStorage.setItem('sfm_live_planif_fb', JSON.stringify(appPlanificacion));
 
-      // 2. Render selectivo de la pestaña activa (evita lag visual)
+      // 2. Render selectivo de la pestaña activa
       renderActiveTab();
 
-      // 3. Sincronización estructurada a Firebase (sin stringify monolítico)
+      // 3. Garantizar que todas las unidades de fleet cumplen la regla .validate de Firebase
+      Object.keys(appFleet).forEach(function(uId) {
+        if (!appFleet[uId] || typeof appFleet[uId] !== 'object') {
+          appFleet[uId] = { estado: 'DISPONIBLE', situacion: 'En Circulación (Línea)', nota: '' };
+        } else if (!appFleet[uId].estado) {
+          appFleet[uId].estado = 'DISPONIBLE';
+        }
+      });
+
+      // 4. Sincronización segura a Firebase (serializando turnos para evitar conflicto con '/')
       if (db) {
+        var dot = document.getElementById('firebase-dot');
+        var statusTxt = document.getElementById('firebase-status-text');
+        if (statusTxt) statusTxt.textContent = "Guardando...";
+
         db.ref('sfm_taller_live').update({
           fleet: appFleet,
           vias: appVias,
           reqs: appReqs,
-          turnos: appTurnosCalendar,
-          turnosDays: turnosDays,
-          pendientes: appPendientes,
-          planificacion: appPlanificacion,
+          turnos: JSON.stringify(appTurnosCalendar),
+          turnosDays: JSON.stringify(turnosDays),
+          pendientes: JSON.stringify(appPendientes),
+          planificacion: JSON.stringify(appPlanificacion),
           updatedAt: firebase.database.ServerValue.TIMESTAMP
+        }).then(function() {
+          if (dot) dot.className = "w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse";
+          if (statusTxt) statusTxt.textContent = "En Vivo (Firebase)";
         }).catch(function(err) {
           console.error("Error enviando a Firebase:", err);
+          if (dot) dot.className = "w-1.5 h-1.5 rounded-full bg-rose-500";
+          if (statusTxt) statusTxt.textContent = "Error Guardado";
+          alert("Firebase rechazó el guardado: " + err.message);
         });
       }
     }
@@ -956,10 +975,10 @@
         fleet: appFleet,
         vias: appVias,
         reqs: appReqs,
-        turnos: appTurnosCalendar,
-        turnosDays: turnosDays,
-        pendientes: appPendientes,
-        planificacion: appPlanificacion,
+        turnos: JSON.stringify(appTurnosCalendar),
+        turnosDays: JSON.stringify(turnosDays),
+        pendientes: JSON.stringify(appPendientes),
+        planificacion: JSON.stringify(appPlanificacion),
         updatedAt: firebase.database.ServerValue.TIMESTAMP
       });
     }
