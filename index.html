@@ -731,8 +731,33 @@
     var currentWeekOffset = 0;
     var activeHighlightedDay = "1/4";
     var activeTabId = 'disponibilidad';
-    var currentPlanifWeek = 42;
-    var currentPlanifYear = 2026;
+    var currentPlanifWeek = 1;
+    var currentPlanifYear = new Date().getFullYear();
+
+    // Calcula automáticamente la semana y el año actual según norma ISO 8601
+    function irASemanaActualPlanif() {
+      var d = new Date();
+      d.setHours(0, 0, 0, 0);
+      d.setDate(d.getDate() + 3 - ((d.getDay() + 6) % 7));
+      var week1 = new Date(d.getFullYear(), 0, 4);
+      currentPlanifYear = d.getFullYear();
+      currentPlanifWeek = 1 + Math.round(((d.getTime() - week1.getTime()) / 86400000 - 3 + ((week1.getDay() + 6) % 7)) / 7);
+    }
+
+    // Busca el día de hoy en el cuadrante de turnos y desplaza la vista a su bloque de 7 días
+    function irAHoyTurnos() {
+      var hoy = new Date();
+      var hoyStr = hoy.getDate() + '/' + (hoy.getMonth() + 1);
+      if (Array.isArray(turnosDays)) {
+        var idxHoy = turnosDays.findIndex(function(d) { return d.date === hoyStr; });
+        if (idxHoy !== -1) {
+          activeHighlightedDay = hoyStr;
+          currentWeekOffset = Math.floor(idxHoy / 7) * 7;
+        }
+      }
+    }
+
+    irASemanaActualPlanif();
 
     window.addEventListener('DOMContentLoaded', function() {
       loadLocalCache();
@@ -808,11 +833,7 @@
         activeHighlightedDay = normalizarFechaExcel(activeHighlightedDay);
       }
 
-      var hoy = new Date();
-      var hoyStr = hoy.getDate() + '/' + (hoy.getMonth() + 1);
-      if (Array.isArray(turnosDays) && turnosDays.some(function(d){ return d.date === hoyStr; })) {
-        activeHighlightedDay = hoyStr;
-      }
+      irAHoyTurnos();
 
       return huboCambios;
     }
@@ -999,6 +1020,8 @@
           if (navBtn) navBtn.className = 'py-2.5 flex flex-col items-center gap-0.5 text-slate-400 font-bold transition';
         }
       });
+      if (tId === 'turnos') irAHoyTurnos();
+      if (tId === 'planificacion') irASemanaActualPlanif();
       renderActiveTab();
     }
 
